@@ -8,7 +8,7 @@ pipeline_info:
 source:
   type: "auto_loader"
   format: "avro"
-  path: "abfss://landing@farmia.dfs.core.windows.net/iot/sensors/"
+  path: "abfss://landing@stfarmia.dfs.core.windows.net/iot/sensors/"
   options:
     cloudFiles.format: "avro"
     cloudFiles.useIncrementalListing: "true"
@@ -70,7 +70,7 @@ transformations:
       expression: "lit('iot_sensors')"
       datatype: "STRING"
     - name: "_file_path"
-      expression: "lit('abfss://landing@farmia.dfs.core.windows.net/iot/sensors/')"
+      expression: "lit('abfss://landing@stfarmia.dfs.core.windows.net/iot/sensors/')"
       datatype: "STRING"
     - name: "_execution_user_id"
       expression: "lit('databricks_service')"
@@ -98,7 +98,7 @@ transformations:
     allowed_lateness_minutes: 5
     max_state_bytes: 1000000000
     checkpoint_interval_minutes: 5
-    state_location: "abfss://checkpoints@farmia.dfs.core.windows.net/iot/watermark"
+    state_location: "abfss://checkpoints@stfarmia.dfs.core.windows.net/iot/watermark"
 
 sink:
   format: "delta"

@@ -8,7 +8,7 @@ pipeline_info:
 source:
   type: "auto_loader"
   format: "parquet"
-  path: "abfss://landing@farmia.dfs.core.windows.net/sales/transactions/"
+  path: "abfss://landing@stfarmia.dfs.core.windows.net/sales/transactions/"
   options:
     cloudFiles.format: "parquet"
     cloudFiles.useIncrementalListing: "true"
@@ -79,7 +79,7 @@ transformations:
       expression: "lit('sales_online')"
       datatype: "STRING"
     - name: "_file_path"
-      expression: "lit('abfss://landing@farmia.dfs.core.windows.net/sales/transactions/')"
+      expression: "lit('abfss://landing@stfarmia.dfs.core.windows.net/sales/transactions/')"
       datatype: "STRING"
     - name: "_execution_user_id"
       expression: "lit('databricks_service')"

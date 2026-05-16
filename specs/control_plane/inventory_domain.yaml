@@ -8,7 +8,7 @@ pipeline_info:
 source:
   type: "auto_loader"
   format: "parquet"
-  path: "abfss://landing@farmia.dfs.core.windows.net/inventory/erp/"
+  path: "abfss://landing@stfarmia.dfs.core.windows.net/inventory/erp/"
   options:
     cloudFiles.format: "parquet"
     cloudFiles.useIncrementalListing: "true"
@@ -67,7 +67,7 @@ transformations:
       expression: "lit('inventory_erp')"
       datatype: "STRING"
     - name: "_file_path"
-      expression: "lit('abfss://landing@farmia.dfs.core.windows.net/inventory/erp/')"
+      expression: "lit('abfss://landing@stfarmia.dfs.core.windows.net/inventory/erp/')"
       datatype: "STRING"
     - name: "_execution_user_id"
       expression: "lit('databricks_service')"

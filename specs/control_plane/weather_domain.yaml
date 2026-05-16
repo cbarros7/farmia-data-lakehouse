@@ -8,7 +8,7 @@ pipeline_info:
 source:
   type: "auto_loader"
   format: "json"
-  path: "abfss://landing@farmia.dfs.core.windows.net/weather/external/"
+  path: "abfss://landing@stfarmia.dfs.core.windows.net/weather/external/"
   options:
     cloudFiles.format: "json"
     cloudFiles.useIncrementalListing: "true"
@@ -61,7 +61,7 @@ transformations:
       expression: "lit('weather_external')"
       datatype: "STRING"
     - name: "_file_path"
-      expression: "lit('abfss://landing@farmia.dfs.core.windows.net/weather/external/')"
+      expression: "lit('abfss://landing@stfarmia.dfs.core.windows.net/weather/external/')"
       datatype: "STRING"
     - name: "_execution_user_id"
       expression: "lit('databricks_service')"
@@ -89,7 +89,7 @@ transformations:
     allowed_lateness_minutes: 5
     max_state_bytes: 1000000000
     checkpoint_interval_minutes: 5
-    state_location: "abfss://checkpoints@farmia.dfs.core.windows.net/weather/watermark"
+    state_location: "abfss://checkpoints@stfarmia.dfs.core.windows.net/weather/watermark"
 
 sink:
   format: "delta"
