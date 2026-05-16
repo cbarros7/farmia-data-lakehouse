@@ -1,0 +1,313 @@
+pipeline_info:
+  domain: "iot_sensors"
+  subdomain: "telemetry"
+  version: "1.0.0"
+  owner: "data-platform"
+  description: "Ingesta de telemetría de sensores IoT en campo"
+
+source:
+  type: "auto_loader"
+  format: "avro"
+  path: "abfss://landing@stfarmia.dfs.core.windows.net/iot/sensors/"
+  options:
+    cloudFiles.format: "avro"
+    cloudFiles.useIncrementalListing: "true"
+    cloudFiles.schemaEvolutionMode: "none"
+    cloudFiles.rescuedDataColumn: "_rescued_data"
+    cloudFiles.maxBytesPerTrigger: "134217728"
+    cloudFiles.inferColumnTypes: "false"
+
+schema_validation:
+  schema_evolution_mode: "none"
+  rescued_data_column: "_rescued_data"
+  fields:
+    - name: "sensor_id"
+      type: "StringType"
+      nullable: false
+    - name: "location_id"
+      type: "StringType"
+      nullable: false
+    - name: "temperature"
+      type: "DoubleType"
+      nullable: true
+    - name: "humidity"
+      type: "DoubleType"
+      nullable: true
+    - name: "ph"
+      type: "DoubleType"
+      nullable: true
+    - name: "soil_moisture"
+      type: "DoubleType"
+      nullable: true
+    - name: "reading_timestamp"
+      type: "TimestampType"
+      nullable: false
+
+transformations:
+  pattern: "metadata_injection"
+  spark_memory_config:
+    spark.executor.memory: "8g"
+    spark.memory.fraction: "0.6"
+    spark.memory.storageFraction: "0.4"
+
+  metadata_injection:
+    - name: "_batch_id"
+      expression: "lit(batch_id)"
+      datatype: "BIGINT"
+    - name: "_ingest_timestamp"
+      expression: "current_timestamp()"
+      datatype: "TIMESTAMP"
+    - name: "_event_timestamp"
+      expression: "col(reading_timestamp)"
+      datatype: "TIMESTAMP"
+    - name: "_schema_version_id"
+      expression: "lit('1.0.0')"
+      datatype: "STRING"
+    - name: "_pipeline_git_hash"
+      expression: "lit('placeholder_hash')"
+      datatype: "STRING"
+    - name: "_source_system"
+      expression: "lit('iot_sensors')"
+      datatype: "STRING"
+    - name: "_file_path"
+      expression: "lit('abfss://landing@stfarmia.dfs.core.windows.net/iot/sensors/')"
+      datatype: "STRING"
+    - name: "_execution_user_id"
+      expression: "lit('databricks_service')"
+      datatype: "STRING"
+    - name: "_environment_id"
+      expression: "lit('prod')"
+      datatype: "STRING"
+    - name: "_cluster_id"
+      expression: "lit('cluster_id_placeholder')"
+      datatype: "STRING"
+    - name: "_processing_library_version"
+      expression: "lit('3.3.0')"
+      datatype: "STRING"
+    - name: "_operation_type"
+      expression: "lit('INSERT')"
+      datatype: "STRING"
+    - name: "_retention_ttl"
+      expression: "lit('14')"
+      datatype: "STRING"
+
+  watermarking:
+    enabled: true
+    event_time_column: "reading_timestamp"
+    delayed_threshold_minutes: 30
+    allowed_lateness_minutes: 5
+    max_state_bytes: 1000000000
+    checkpoint_interval_minutes: 5
+    state_location: "abfss://checkpoints@stfarmia.dfs.core.windows.net/iot/watermark"
+
+sink:
+  format: "delta"
+  mode: "append"
+  table_name: "silver.iot_sensors"
+  merge_keys: []
+  partition_by: ["sensor_id", "reading_timestamp"]
+  lifecycle:
+    ttl: "14"
+    sync_window: "D-1"
+    pre_aggregation:
+      enabled: true
+      trigger_days_before_ttl: 1
+      aggregations:
+        - metric: "temperature"
+          operations: ["min", "max", "avg"]
+          frequency: "daily"
+          output_table: "silver.iot_daily_agg"
+        - metric: "humidity"
+          operations: ["min", "max", "avg"]
+          frequency: "daily"
+        - metric: "ph"
+          operations: ["min", "max", "avg"]
+          frequency: "daily"
+        - metric: "soil_moisture"
+          operations: ["min", "max", "avg"]
+          frequency: "daily"
+    optimization:
+      z_order_by: ["reading_timestamp", "sensor_id"]
+      vacuum_days: 7
+
+dlq:
+  quarantine_table: "bronze.iot_quarantine"
+  late_data:
+    enabled: true
+    table_name: "bronze.iot_late_data"
+    storage_days: 14
+
+  circuit_breaker:
+    max_error_percentage: 5
+    action: "degrade_mode"
+    alert_threshold_minutes: 10
+    degradation_duration_minutes: 30
+    auto_recover: true
+
+  exception_masking:
+    enabled: true
+    persistence_table: "system.alert_logs"
+    silence_duration_hours: 4
+    alert_threshold_count: 5
+
+  watchdog:
+    enabled: true
+    max_execution_minutes: 45
+    check_interval_seconds: 30
+    alert_action: "warn_no_fail"
+
+tables_config:
+  tables:
+    - name: "bronze.iot_sensors"
+      layer: "bronze"
+      columns:
+        - name: "_file_path"
+          type: "STRING"
+          nullable: false
+        - name: "_ingest_timestamp"
+          type: "TIMESTAMP"
+          nullable: false
+        - name: "sensor_id"
+          type: "STRING"
+          nullable: false
+        - name: "location_id"
+          type: "STRING"
+          nullable: false
+        - name: "temperature"
+          type: "DOUBLE"
+          nullable: true
+        - name: "humidity"
+          type: "DOUBLE"
+          nullable: true
+        - name: "ph"
+          type: "DOUBLE"
+          nullable: true
+        - name: "soil_moisture"
+          type: "DOUBLE"
+          nullable: true
+        - name: "reading_timestamp"
+          type: "TIMESTAMP"
+          nullable: false
+        - name: "_rescued_data"
+          type: "STRING"
+          nullable: true
+      partition_by: ["reading_timestamp"]
+
+    - name: "silver.iot_sensors"
+      layer: "silver"
+      columns:
+        - name: "_batch_id"
+          type: "BIGINT"
+          nullable: false
+        - name: "_ingest_timestamp"
+          type: "TIMESTAMP"
+          nullable: false
+        - name: "_event_timestamp"
+          type: "TIMESTAMP"
+          nullable: false
+        - name: "_schema_version_id"
+          type: "STRING"
+          nullable: false
+        - name: "_pipeline_git_hash"
+          type: "STRING"
+          nullable: false
+        - name: "_source_system"
+          type: "STRING"
+          nullable: false
+        - name: "_file_path"
+          type: "STRING"
+          nullable: false
+        - name: "_execution_user_id"
+          type: "STRING"
+          nullable: false
+        - name: "_environment_id"
+          type: "STRING"
+          nullable: false
+        - name: "_cluster_id"
+          type: "STRING"
+          nullable: false
+        - name: "_processing_library_version"
+          type: "STRING"
+          nullable: false
+        - name: "_operation_type"
+          type: "STRING"
+          nullable: false
+        - name: "_retention_ttl"
+          type: "STRING"
+          nullable: false
+        - name: "sensor_id"
+          type: "STRING"
+          nullable: false
+        - name: "location_id"
+          type: "STRING"
+          nullable: false
+        - name: "temperature"
+          type: "DOUBLE"
+          nullable: true
+        - name: "humidity"
+          type: "DOUBLE"
+          nullable: true
+        - name: "ph"
+          type: "DOUBLE"
+          nullable: true
+        - name: "soil_moisture"
+          type: "DOUBLE"
+          nullable: true
+        - name: "reading_timestamp"
+          type: "TIMESTAMP"
+          nullable: false
+      partition_by: ["sensor_id", "reading_timestamp"]
+
+    - name: "bronze.iot_quarantine"
+      layer: "quarantine"
+      columns:
+        - name: "_batch_id"
+          type: "BIGINT"
+          nullable: false
+        - name: "_ingest_timestamp"
+          type: "TIMESTAMP"
+          nullable: false
+        - name: "_reason"
+          type: "STRING"
+          nullable: true
+        - name: "_raw_data"
+          type: "STRING"
+          nullable: true
+      partition_by: ["_ingest_timestamp"]
+
+    - name: "bronze.iot_late_data"
+      layer: "late_data"
+      columns:
+        - name: "_late_data_received_timestamp"
+          type: "TIMESTAMP"
+          nullable: false
+        - name: "_watermark_at_arrival"
+          type: "TIMESTAMP"
+          nullable: false
+        - name: "_delay_minutes"
+          type: "INT"
+          nullable: false
+        - name: "_reason"
+          type: "STRING"
+          nullable: true
+        - name: "sensor_id"
+          type: "STRING"
+          nullable: true
+        - name: "location_id"
+          type: "STRING"
+          nullable: true
+        - name: "temperature"
+          type: "DOUBLE"
+          nullable: true
+        - name: "humidity"
+          type: "DOUBLE"
+          nullable: true
+        - name: "ph"
+          type: "DOUBLE"
+          nullable: true
+        - name: "soil_moisture"
+          type: "DOUBLE"
+          nullable: true
+        - name: "reading_timestamp"
+          type: "TIMESTAMP"
+          nullable: true

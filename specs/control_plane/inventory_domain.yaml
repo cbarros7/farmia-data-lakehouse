@@ -1,0 +1,249 @@
+pipeline_info:
+  domain: "inventory_erp"
+  subdomain: "erp_sync"
+  version: "1.0.0"
+  owner: "data-platform"
+  description: "Datos de existencias y movimientos de stock provenientes del ERP"
+
+source:
+  type: "auto_loader"
+  format: "parquet"
+  path: "abfss://landing@stfarmia.dfs.core.windows.net/inventory/erp/"
+  options:
+    cloudFiles.format: "parquet"
+    cloudFiles.useIncrementalListing: "true"
+    cloudFiles.schemaEvolutionMode: "none"
+    cloudFiles.rescuedDataColumn: "_rescued_data"
+    cloudFiles.maxBytesPerTrigger: "134217728"
+    cloudFiles.inferColumnTypes: "false"
+
+schema_validation:
+  schema_evolution_mode: "none"
+  rescued_data_column: "_rescued_data"
+  fields:
+    - name: "product_id"
+      type: "StringType"
+      nullable: false
+    - name: "warehouse_id"
+      type: "StringType"
+      nullable: false
+    - name: "quantity_available"
+      type: "IntegerType"
+      nullable: false
+    - name: "quantity_reserved"
+      type: "IntegerType"
+      nullable: true
+    - name: "last_updated"
+      type: "TimestampType"
+      nullable: false
+    - name: "operation_id"
+      type: "StringType"
+      nullable: false
+
+transformations:
+  pattern: "metadata_injection"
+  spark_memory_config:
+    spark.executor.memory: "8g"
+    spark.memory.fraction: "0.6"
+    spark.memory.storageFraction: "0.4"
+
+  metadata_injection:
+    - name: "_batch_id"
+      expression: "lit(batch_id)"
+      datatype: "BIGINT"
+    - name: "_ingest_timestamp"
+      expression: "current_timestamp()"
+      datatype: "TIMESTAMP"
+    - name: "_event_timestamp"
+      expression: "col(last_updated)"
+      datatype: "TIMESTAMP"
+    - name: "_schema_version_id"
+      expression: "lit('1.0.0')"
+      datatype: "STRING"
+    - name: "_pipeline_git_hash"
+      expression: "lit('placeholder_hash')"
+      datatype: "STRING"
+    - name: "_source_system"
+      expression: "lit('inventory_erp')"
+      datatype: "STRING"
+    - name: "_file_path"
+      expression: "lit('abfss://landing@stfarmia.dfs.core.windows.net/inventory/erp/')"
+      datatype: "STRING"
+    - name: "_execution_user_id"
+      expression: "lit('databricks_service')"
+      datatype: "STRING"
+    - name: "_environment_id"
+      expression: "lit('prod')"
+      datatype: "STRING"
+    - name: "_cluster_id"
+      expression: "lit('cluster_id_placeholder')"
+      datatype: "STRING"
+    - name: "_processing_library_version"
+      expression: "lit('3.3.0')"
+      datatype: "STRING"
+    - name: "_operation_type"
+      expression: "lit('MERGE')"
+      datatype: "STRING"
+    - name: "_retention_ttl"
+      expression: "lit('indefinite')"
+      datatype: "STRING"
+
+sink:
+  format: "delta"
+  mode: "merge_into"
+  table_name: "silver.inventory_erp"
+  merge_keys: ["product_id", "warehouse_id"]
+  partition_by: ["warehouse_id"]
+  options:
+    delta.enableIcebergCompatV2: "true"
+    delta.universalFormat.enabledFormats: "iceberg"
+  lifecycle:
+    sync_window: "D-1"
+  optimization:
+    z_order_by: ["last_updated", "product_id"]
+    vacuum_days: 30
+
+dlq:
+  quarantine_table: "bronze.inventory_quarantine"
+  late_data:
+    enabled: false
+
+  circuit_breaker:
+    max_error_percentage: 1
+    action: "fail_fast"
+    alert_threshold_minutes: 5
+    degradation_duration_minutes: 15
+    auto_recover: false
+
+  retry_policy:
+    strategy: "fixed"
+    max_retries: 3
+    initial_interval_seconds: 5
+    max_interval_seconds: 30
+    multiplier: 1.0
+    jitter_enabled: false
+
+  exception_masking:
+    enabled: true
+    persistence_table: "system.alert_logs"
+    silence_duration_hours: 4
+    alert_threshold_count: 3
+
+  watchdog:
+    enabled: true
+    max_execution_minutes: 45
+    check_interval_seconds: 30
+    alert_action: "warn_no_fail"
+
+tables_config:
+  tables:
+    - name: "bronze.inventory_erp"
+      layer: "bronze"
+      columns:
+        - name: "_file_path"
+          type: "STRING"
+          nullable: false
+        - name: "_ingest_timestamp"
+          type: "TIMESTAMP"
+          nullable: false
+        - name: "product_id"
+          type: "STRING"
+          nullable: false
+        - name: "warehouse_id"
+          type: "STRING"
+          nullable: false
+        - name: "quantity_available"
+          type: "INT"
+          nullable: false
+        - name: "quantity_reserved"
+          type: "INT"
+          nullable: true
+        - name: "last_updated"
+          type: "TIMESTAMP"
+          nullable: false
+        - name: "operation_id"
+          type: "STRING"
+          nullable: false
+        - name: "_rescued_data"
+          type: "STRING"
+          nullable: true
+      partition_by: ["last_updated"]
+
+    - name: "silver.inventory_erp"
+      layer: "silver"
+      columns:
+        - name: "_batch_id"
+          type: "BIGINT"
+          nullable: false
+        - name: "_ingest_timestamp"
+          type: "TIMESTAMP"
+          nullable: false
+        - name: "_event_timestamp"
+          type: "TIMESTAMP"
+          nullable: false
+        - name: "_schema_version_id"
+          type: "STRING"
+          nullable: false
+        - name: "_pipeline_git_hash"
+          type: "STRING"
+          nullable: false
+        - name: "_source_system"
+          type: "STRING"
+          nullable: false
+        - name: "_file_path"
+          type: "STRING"
+          nullable: false
+        - name: "_execution_user_id"
+          type: "STRING"
+          nullable: false
+        - name: "_environment_id"
+          type: "STRING"
+          nullable: false
+        - name: "_cluster_id"
+          type: "STRING"
+          nullable: false
+        - name: "_processing_library_version"
+          type: "STRING"
+          nullable: false
+        - name: "_operation_type"
+          type: "STRING"
+          nullable: false
+        - name: "_retention_ttl"
+          type: "STRING"
+          nullable: false
+        - name: "product_id"
+          type: "STRING"
+          nullable: false
+        - name: "warehouse_id"
+          type: "STRING"
+          nullable: false
+        - name: "quantity_available"
+          type: "INT"
+          nullable: false
+        - name: "quantity_reserved"
+          type: "INT"
+          nullable: true
+        - name: "last_updated"
+          type: "TIMESTAMP"
+          nullable: false
+        - name: "operation_id"
+          type: "STRING"
+          nullable: false
+      partition_by: ["warehouse_id"]
+
+    - name: "bronze.inventory_quarantine"
+      layer: "quarantine"
+      columns:
+        - name: "_batch_id"
+          type: "BIGINT"
+          nullable: false
+        - name: "_ingest_timestamp"
+          type: "TIMESTAMP"
+          nullable: false
+        - name: "_reason"
+          type: "STRING"
+          nullable: true
+        - name: "_raw_data"
+          type: "STRING"
+          nullable: true
+      partition_by: ["_ingest_timestamp"]
