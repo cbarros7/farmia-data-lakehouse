@@ -1,0 +1,31 @@
+# Control plane mirror (authoritative copy in ADLS per ADD §3.2).
+schema_version: "1.0"
+architectural_quantums:
+  - id: sales_online
+    source_format: parquet
+    write_strategy: merge_into
+  - id: inventory_erp
+    source_format: parquet
+    write_strategy: merge_into
+  - id: iot_sensors
+    source_format: avro
+    write_strategy: append
+    retention_ttl_days: 14
+  - id: weather_external
+    source_format: json
+    write_strategy: append
+    retention_ttl_days: 14
+runtime:
+  spark_storage_level: MEMORY_AND_DISK
+  schema_evolution_mode: none
+  event_hubs_network_mbps_budget: 2
+  watermark_late_data_minutes: 30
+  dlq_degradation_threshold_percent: 5
+  watchdog_processing_alert_minutes: 45
+  alert_masking_hours: 4
+control_plane:
+  yaml_storage: adls_gen2
+  incremental_loader: databricks_auto_loader
+finops_gold:
+  trino_sync: d_minus_1_background_batch
+  preaggregation_layer: silver
