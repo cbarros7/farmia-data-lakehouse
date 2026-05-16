@@ -2,7 +2,7 @@ data "azurerm_client_config" "current" {}
 
 locals {
   resource_group_name = "rg-farmia-core"
-  adls_containers     = ["landing", "bronze", "silver", "gold", "metadata"]
+  adls_containers     = ["landing", "bronze", "silver", "gold", "metadata", "checkpoints"]
 }
 
 resource "azurerm_resource_group" "core" {
