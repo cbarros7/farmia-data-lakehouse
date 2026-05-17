@@ -5,6 +5,8 @@ pipeline_info:
   owner: "data-platform"
   description: "Ingesta de datos meteorológicos de API externa"
 
+checkpoint_location: "abfss://checkpoints@stfarmia.dfs.core.windows.net/weather/external/"
+
 source:
   type: "auto_loader"
   format: "json"

@@ -14,6 +14,7 @@ from pyspark.sql.types import StructType, StructField, StringType, DoubleType, T
 
 from src.validation.models import IngestionContract
 from src.engine.processors import UnifiedMemoryCoreProcessor
+from src.engine.lakehouse_initializer import LakehouseInitializer
 
 
 logging.basicConfig(
@@ -51,78 +52,48 @@ def setup_spark_session(app_name: str = "FarmIA-Ingestion") -> SparkSession:
     return spark
 
 
-def create_mock_schema_for_weather() -> StructType:
-    """Esquema de ejemplo para weather domain (mock)."""
-    return StructType([
-        StructField("city", StringType(), True),
-        StructField("temperature", DoubleType(), True),
-        StructField("humidity", DoubleType(), True),
-        StructField("forecast_date", TimestampType(), True),
-    ])
 
-
-def initialize_tables_if_not_exist(spark: SparkSession, config: IngestionContract) -> None:
-    """Crear tablas desde configuración YAML sin hardcodear nada."""
-    from pyspark.sql.types import StructType, StructField
-    from pyspark.sql.types import (
-        StringType, IntegerType, LongType, DoubleType, BooleanType, 
-        TimestampType, DateType, BinaryType
-    )
+def main(contract_path: str):
+    """
+    Orquestar ingesta con Pydantic + Spark.
     
-    type_map = {
-        "STRING": StringType(),
-        "INT": IntegerType(),
-        "BIGINT": LongType(),
-        "DOUBLE": DoubleType(),
-        "BOOLEAN": BooleanType(),
-        "TIMESTAMP": TimestampType(),
-        "DATE": DateType(),
-        "BINARY": BinaryType(),
-    }
-    
-    for table_def in config.tables_config.tables:
-        if spark.catalog.tableExists(table_def.name):
-            logger.info(f"Tabla ya existe: {table_def.name}")
-            continue
-        
-        fields = [
-            StructField(col.name, type_map.get(col.type, StringType()), col.nullable)
-            for col in table_def.columns
-        ]
-        schema = StructType(fields)
-        
-        df = spark.createDataFrame([], schema)
-        writer = df.write.format("delta").mode("overwrite")
-        
-        if table_def.partition_by:
-            writer = writer.partitionBy(*table_def.partition_by)
-        
-        writer.saveAsTable(table_def.name)
-        logger.info(f"Tabla creada: {table_def.name}")
-
-
-
-def main(contract_path: str, checkpoint_location: str):
-    """Orquestar ingesta con Pydantic + Spark."""
+    Flujo:
+    1. Cargar contrato YAML y validar (Pydantic fail-fast)
+    2. Crear SparkSession
+    3. Inicializar data lakehouse (self-healing DDL)
+    4. Procesar datos 
+    """
     logger.info("="*70)
-    logger.info("PROCESADOR UNIFIED MEMORY CORE")
+    logger.info("PROCESADOR MOTOR INGESTA - FarmIA")
     logger.info("="*70)
     
     try:
+        # Task 0: Validación de contrato (fail-fast, sin cluster)
         config = load_config_from_yaml(contract_path)
-        logger.info(f"Pipeline: {config.pipeline_info.domain}/{config.pipeline_info.subdomain}")
+        logger.info(f"Contrato validado: {config.pipeline_info.domain}/{config.pipeline_info.subdomain}")
         
+        # Crear SparkSession
         spark = setup_spark_session(f"FarmIA-{config.pipeline_info.domain}")
         logger.info("SparkSession creada")
         
-        initialize_tables_if_not_exist(spark, config)
-        logger.info("Tablas inicializadas")
+        # Inicializar data lakehouse (self-healing)
+        # Esto crea todos los esquemas y tablas leyendo DDL desde infra/databricks/queries/
+        initializer = LakehouseInitializer(spark)
+        initializer.initialize_all()
+        logger.info("Data Lakehouse inicializado desde DDL")
         
+        # Task 1: Procesamiento de datos
         processor = UnifiedMemoryCoreProcessor(spark, config)
         logger.info("Procesador inicializado")
         
-        logger.info("Procesando datos simulados...")
-        schema = create_mock_schema_for_weather()
+        logger.info("\nProcesando datos simulados...")
+        # Mock schema para demostración (en producción viene de Auto Loader)
+        schema = StructType([
+            StructField("city", StringType(), True),
+            StructField("temperature", DoubleType(), True),
+            StructField("humidity", DoubleType(), True),
+            StructField("forecast_date", TimestampType(), True),
+        ])
         mock_data = [
             ("Madrid", 25.5, 65.0, "2026-05-13 10:00:00"),
             ("Barcelona", 22.1, 70.0, "2026-05-13 10:00:00"),
@@ -147,12 +118,6 @@ if __name__ == "__main__":
         default="specs/control_plane/weather_domain.yaml",
         help="Ruta al YAML de configuración"
     )
-    parser.add_argument(
-        "--checkpoint_location",
-        type=str,
-        default="abfss://checkpoints@farmia.dfs.core.windows.net/weather",
-        help="Ubicación de checkpoints"
-    )
     
     args = parser.parse_args()
-    main(args.contract_path, args.checkpoint_location)
+    main(args.contract_path)
