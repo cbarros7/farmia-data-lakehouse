@@ -5,6 +5,7 @@ Ejemplo de flujo completo en FarmIA.
 """
 
 import argparse
+import datetime
 import yaml
 import logging
 from pathlib import Path
@@ -95,8 +96,8 @@ def main(contract_path: str):
             StructField("forecast_date", TimestampType(), True),
         ])
         mock_data = [
-            ("Madrid", 25.5, 65.0, "2026-05-13 10:00:00"),
-            ("Barcelona", 22.1, 70.0, "2026-05-13 10:00:00"),
+            ("Madrid", 25.5, 65.0, datetime.datetime.now()),
+            ("Barcelona", 22.1, 70.0, datetime.datetime.now()),
         ]
         df = spark.createDataFrame(mock_data, schema=schema)
         processor.process_batch(df, batch_id=1)

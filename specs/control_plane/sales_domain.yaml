@@ -56,10 +56,10 @@ schema_validation:
 
 transformations:
   pattern: "metadata_injection"
-  #spark_memory_config:
-  #  spark.executor.memory: "8g"
-  #  spark.memory.fraction: "0.6"
-  #  spark.memory.storageFraction: "0.4"
+  spark_memory_config:
+   spark.executor.memory: "8g"
+   spark.memory.fraction: "0.6"
+   spark.memory.storageFraction: "0.4"
 
   metadata_injection:
     - name: "_batch_id"
