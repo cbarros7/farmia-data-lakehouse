@@ -5,6 +5,8 @@ pipeline_info:
   owner: "data-platform"
   description: "Ingesta de telemetría de sensores IoT en campo"
 
+checkpoint_location: "abfss://checkpoints@stfarmia.dfs.core.windows.net/iot/sensors/"
+
 source:
   type: "auto_loader"
   format: "avro"
