@@ -75,7 +75,7 @@ from pyspark.sql.functions import (
     col, lit, current_timestamp, to_timestamp, max as spark_max,
     sum as spark_sum, count, when, expr, abs as spark_abs, coalesce
 )
-from pyspark.storage import StorageLevel
+from pyspark import StorageLevel
 import tenacity
 from tenacity import (
     retry, stop_after_attempt, wait_exponential, retry_if_exception_type
