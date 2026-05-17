@@ -136,6 +136,7 @@ dlq:
   quarantine_table: "bronze.iot_quarantine"
   late_data:
     enabled: true
+    max_delay_minutes: 30
     table_name: "bronze.iot_late_data"
     storage_days: 14
 
@@ -158,6 +159,10 @@ dlq:
     check_interval_seconds: 30
     alert_action: "warn_no_fail"
 
+  retry_policy:
+    strategy: "exponential_backoff"
+    max_retries: 3
+  
 tables_config:
   tables:
     - name: "bronze.iot_sensors"
