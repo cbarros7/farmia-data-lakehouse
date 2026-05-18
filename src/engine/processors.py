@@ -206,7 +206,7 @@ class UnifiedMemoryCoreProcessor:
         enriched_df = df
         for meta in self.config.transformations.metadata_injection:
             validated_expr = self._validate_metadata_expr(meta.expression)
-            enriched_df = enriched_df.withColumn(meta.name, validated_expr)
+            enriched_df = enriched_df.withColumn(meta.name, expr(validated_expr))
         
         if "_batch_id" not in enriched_df.columns:
             enriched_df = enriched_df.withColumn("_batch_id", lit(batch_id))
@@ -401,7 +401,7 @@ class UnifiedMemoryCoreProcessor:
             opt = self.config.sink.lifecycle.optimization
             if opt.z_order_by:
                 z_cols = ", ".join(opt.z_order_by)
-                self.spark.sql(f"ALTER TABLE {table_name} SET TBLPROPERTIES ('delta.dataSkippingNumIndexedCols' = '32')")
+                self.spark.sql(f"ALTER TABLE {table_name} SET DBPROPERTIES ('delta.dataSkippingNumIndexedCols' = '32')")
                 logger.debug(f"Z-order: {z_cols}")
             if opt.vacuum_days:
                 self.spark.sql(f"VACUUM {table_name} RETAIN {opt.vacuum_days} DAYS")
