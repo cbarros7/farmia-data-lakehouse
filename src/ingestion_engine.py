@@ -79,7 +79,13 @@ def main(contract_path: str):
         
         # Inicializar data lakehouse (self-healing)
         # Esto crea todos los esquemas y tablas leyendo DDL desde infra/databricks/queries/
-        PROJECT_ROOT = Path(__file__).resolve().parents[1]
+        try:
+            _script_path = Path(__file__).resolve()
+        except NameError:
+            import inspect
+            _script_path = Path(inspect.currentframe().f_code.co_filename).resolve()
+
+        PROJECT_ROOT = _script_path.parents[1]
 
         initializer = LakehouseInitializer(spark, project_root=PROJECT_ROOT)
         initializer.initialize_all()

@@ -118,7 +118,14 @@ class IngestionContract(BaseModel):
 
 
 def main() -> int:
-    root = Path(__file__).resolve().parents[1]
+    try:
+        _script_path = Path(__file__).resolve()
+    except NameError:
+        import inspect
+        _script_path = Path(inspect.currentframe().f_code.co_filename).resolve()
+
+    root = _script_path.parents[1]
+    
     spec_path = root / "specs" / "control_plane" / "ingestion_contract.yaml"
     if not spec_path.is_file() or spec_path.stat().st_size == 0:
         print(f"FAIL: missing or empty spec at {spec_path}", file=sys.stderr)
