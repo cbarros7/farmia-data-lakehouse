@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS silver.iot_sensors (
     `humidity` DOUBLE,
     `ph` DOUBLE,
     `reading_timestamp` TIMESTAMP,
+    `reading_date` DATE,
     `batch_id` STRING NOT NULL,
     `ingest_timestamp` TIMESTAMP NOT NULL,
     `event_timestamp` TIMESTAMP NOT NULL,
@@ -20,7 +21,7 @@ CREATE TABLE IF NOT EXISTS silver.iot_sensors (
     `retention_ttl` INT NOT NULL
 )
 USING DELTA
-PARTITIONED BY (sensor_id, reading_timestamp)
+PARTITIONED BY (sensor_id, reading_date)
 TBLPROPERTIES (
     'delta.enableIcebergCompatV2' = 'true',
     'delta.universalFormat.enabledFormats' = 'iceberg',
