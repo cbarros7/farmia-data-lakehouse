@@ -1,22 +1,22 @@
 CREATE TABLE IF NOT EXISTS silver.weather_external (
-    `city` STRING,
+    `city` STRING NOT NULL,
     `temperature` DOUBLE,
     `humidity` DOUBLE,
-    `forecast_timestamp` TIMESTAMP,
-    `forecast_date` DATE,
-    `batch_id` STRING NOT NULL,
-    `ingest_timestamp` TIMESTAMP NOT NULL,
-    `event_timestamp` TIMESTAMP NOT NULL,
-    `schema_version_id` STRING NOT NULL,
-    `pipeline_git_hash` STRING NOT NULL,
-    `source_system` STRING NOT NULL,
-    `file_path` STRING NOT NULL,
-    `execution_user_id` STRING NOT NULL,
-    `environment_id` STRING NOT NULL,
-    `cluster_id` STRING NOT NULL,
-    `processing_library_version` STRING NOT NULL,
-    `operation_type` STRING NOT NULL,
-    `retention_ttl` INT NOT NULL
+    `forecast_timestamp` TIMESTAMP NOT NULL,
+    `forecast_date` DATE NOT NULL,
+    `_batch_id` BIGINT NOT NULL,
+    `_ingest_timestamp` TIMESTAMP NOT NULL,
+    `_event_timestamp` TIMESTAMP NOT NULL,
+    `_schema_version_id` STRING NOT NULL,
+    `_pipeline_git_hash` STRING NOT NULL,
+    `_source_system` STRING NOT NULL,
+    `_file_path` STRING NOT NULL,
+    `_execution_user_id` STRING NOT NULL,
+    `_environment_id` STRING NOT NULL,
+    `_cluster_id` STRING NOT NULL,
+    `_processing_library_version` STRING NOT NULL,
+    `_operation_type` STRING NOT NULL,
+    `_retention_ttl` STRING NOT NULL
 )
 USING DELTA
 PARTITIONED BY (city, forecast_date)
