@@ -414,3 +414,4 @@ class IngestionContract(BaseModel):
     transformations: TransformationsConfig = Field(..., description="Transformaciones, metadatos")
     sink: SinkConfig = Field(..., description="Estrategia idempotente de escritura")
     tables_config: TablesConfig = Field(..., description="Definición de todas las tablas con esquemas")
+    checkpoint_location: str = Field(..., description="Ruta ADLS Gen2 para checkpoints de streaming")
