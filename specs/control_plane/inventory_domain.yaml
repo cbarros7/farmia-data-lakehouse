@@ -36,6 +36,9 @@ schema_validation:
       type: "IntegerType"
       nullable: true
     - name: "last_updated"
+      type: "DateType"
+      nullable: false
+    - name: "last_updated_timestamp"
       type: "TimestampType"
       nullable: false
     - name: "operation_id"
@@ -89,6 +92,9 @@ transformations:
     - name: "_retention_ttl"
       expression: "lit('indefinite')"
       datatype: "STRING"
+    - name: "last_updated"
+      expression: "cast(col(last_updated_timestamp) as DATE)"
+      datatype: "DATE"
 
 sink:
   format: "delta"
@@ -161,6 +167,9 @@ tables_config:
           type: "INT"
           nullable: true
         - name: "last_updated"
+          type: "DATE"
+          nullable: false
+        - name: "last_updated_timestamp"
           type: "TIMESTAMP"
           nullable: false
         - name: "operation_id"
@@ -226,6 +235,9 @@ tables_config:
           type: "INT"
           nullable: true
         - name: "last_updated"
+          type: "DATE"
+          nullable: false
+        - name: "last_updated_timestamp"
           type: "TIMESTAMP"
           nullable: false
         - name: "operation_id"

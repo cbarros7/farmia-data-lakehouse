@@ -50,8 +50,11 @@ schema_validation:
     - name: "currency"
       type: "StringType"
       nullable: false
-    - name: "transaction_date"
+    - name: "transaction_timestamp"
       type: "TimestampType"
+      nullable: false
+    - name: "transaction_date"
+      type: "DateType"
       nullable: false
 
 transformations:
@@ -101,6 +104,9 @@ transformations:
     - name: "_retention_ttl"
       expression: "lit('indefinite')"
       datatype: "STRING"
+    - name: "transaction_date"
+      expression: "cast(col(transaction_timestamp) as DATE)"
+      datatype: "DATE"
 
 sink:
   format: "delta"
@@ -178,8 +184,11 @@ tables_config:
         - name: "currency"
           type: "STRING"
           nullable: false
-        - name: "transaction_date"
+        - name: "transaction_timestamp"
           type: "TIMESTAMP"
+          nullable: false
+        - name: "transaction_date"
+          type: "DATE"
           nullable: false
         - name: "_rescued_data"
           type: "STRING"
@@ -246,8 +255,11 @@ tables_config:
         - name: "currency"
           type: "STRING"
           nullable: false
-        - name: "transaction_date"
+        - name: "transaction_timestamp"
           type: "TIMESTAMP"
+          nullable: false
+        - name: "transaction_date"
+          type: "DATE"
           nullable: false
       partition_by: ["transaction_date"]
 
