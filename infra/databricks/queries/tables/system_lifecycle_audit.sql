@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS system.lifecycle_audit (
     `batch_id` STRING NOT NULL
 )
 USING DELTA
-DBPROPERTIES (
+TBLPROPERTIES (
     'delta.enableDeletionVectors' = 'true',
     'delta.autoCompact.enabled' = 'true',
     'delta.autoCompact.minNumFiles' = '5'

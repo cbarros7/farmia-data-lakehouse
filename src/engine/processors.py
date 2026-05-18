@@ -401,7 +401,7 @@ class UnifiedMemoryCoreProcessor:
             opt = self.config.sink.lifecycle.optimization
             if opt.z_order_by:
                 z_cols = ", ".join(opt.z_order_by)
-                self.spark.sql(f"ALTER TABLE {table_name} SET DBPROPERTIES ('delta.dataSkippingNumIndexedCols' = '32')")
+                self.spark.sql(f"ALTER TABLE {table_name} SET TBLPROPERTIES ('delta.dataSkippingNumIndexedCols' = '32')")
                 logger.debug(f"Z-order: {z_cols}")
             if opt.vacuum_days:
                 self.spark.sql(f"VACUUM {table_name} RETAIN {opt.vacuum_days} DAYS")

@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS silver.weather_external (
 )
 USING DELTA
 PARTITIONED BY (city, forecast_date)
-DBPROPERTIES (
+TBLPROPERTIES (
     'delta.enableIcebergCompatV2' = 'true',
     'delta.universalFormat.enabledFormats' = 'iceberg',
     'delta.columnMapping.mode' = 'name',

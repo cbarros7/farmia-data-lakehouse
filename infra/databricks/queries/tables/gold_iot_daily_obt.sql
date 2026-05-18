@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS gold.iot_daily_obt (
 )
 USING DELTA
 PARTITIONED BY (date)
-DBPROPERTIES (
+TBLPROPERTIES (
     'delta.enableIcebergCompatV2' = 'true',
     'delta.universalFormat.enabledFormats' = 'iceberg',
     'delta.columnMapping.mode' = 'name',

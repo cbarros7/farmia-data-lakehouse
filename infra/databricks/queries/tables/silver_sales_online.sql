@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS silver.sales_online (
 )
 USING DELTA
 PARTITIONED BY (transaction_date)
-DBPROPERTIES (
+TBLPROPERTIES (
     'delta.enableIcebergCompatV2' = 'true',
     'delta.universalFormat.enabledFormats' = 'iceberg',
     'delta.columnMapping.mode' = 'name',
