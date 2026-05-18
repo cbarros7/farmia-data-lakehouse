@@ -95,20 +95,20 @@ def main(contract_path: str):
         processor = UnifiedMemoryCoreProcessor(spark, config)
         logger.info("Procesador inicializado")
         
-        logger.info("\nProcesando datos simulados...")
-        # Mock schema para demostración (en producción viene de Auto Loader)
-        schema = StructType([
-            StructField("city", StringType(), True),
-            StructField("temperature", DoubleType(), True),
-            StructField("humidity", DoubleType(), True),
-            StructField("forecast_date", TimestampType(), True),
-        ])
-        mock_data = [
-            ("Madrid", 25.5, 65.0, datetime.datetime.now()),
-            ("Barcelona", 22.1, 70.0, datetime.datetime.now()),
-        ]
-        df = spark.createDataFrame(mock_data, schema=schema)
-        processor.process_batch(df, batch_id=1)
+        # logger.info("\nProcesando datos simulados...")
+        # # Mock schema para demostración (en producción viene de Auto Loader)
+        # schema = StructType([
+        #     StructField("city", StringType(), True),
+        #     StructField("temperature", DoubleType(), True),
+        #     StructField("humidity", DoubleType(), True),
+        #     StructField("forecast_date", TimestampType(), True),
+        # ])
+        # mock_data = [
+        #     ("Madrid", 25.5, 65.0, datetime.datetime.now()),
+        #     ("Barcelona", 22.1, 70.0, datetime.datetime.now()),
+        # ]
+        # df = spark.createDataFrame(mock_data, schema=schema)
+        # processor.process_batch(df, batch_id=1)
         
         logger.info("="*70)
         logger.info("PROCESAMIENTO COMPLETO")

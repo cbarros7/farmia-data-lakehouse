@@ -126,7 +126,7 @@ class LakehouseInitializer:
         
         # Convertir tabla "schema.table" -> "schema_table.sql"
         schema_table = table_name.replace(".", "_")
-        sql_file = f"{self.tables_path}/{schema_table}.sql"
+        sql_file = self.tables_path / f"{schema_table}.sql"
         
         if not sql_file.exists():
             self.logger.warning(f"SQL no encontrado: {sql_file}")

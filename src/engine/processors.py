@@ -11,57 +11,13 @@ Patrones de Diseño Implementados:
 ├── Exception Masking (Alert Fatigue Prevention): Silenciamiento dinámico de errores recurrentes
 ├── Watchdog (Timeout Suave): Monitoreo no-bloqueante de ejecución
 ├── Strategy Pattern (Sink Strategies): Soporta APPEND, MERGE_INTO, OVERWRITE dinámicamente
-└── Metadata Injection (13 campos obligatorios ADD §3.1): Auditoría profunda por diseño
+└── Metadata Injection (13 campos obligatorios): Auditoría profunda por diseño
 
-Restricciones Críticas (Spec-Driven Development):
-1. Todo desde config: No hay variables hardcodeadas, TODO viene del objeto IngestionContract
-2. Fail-Fast Pre-Spark: Pydantic valida PRE-provisioning (evitar DBU waste)
-3. Transaccional Integrity: Silver y Quarantine son transacciones independientes
-4. State Limits: Watermarking con cap explícito de RAM
-5. Resilencia Anti-Frágil: Tenacity retries con jitter, Circuit Breaker sin cascadas
-
-Flujo General:
-    [Auto Loader] → [df cached] → [Metadata Injection]
-                                        ↓
-                          [Circuit Breaker Check]
-                                        ↓
-                     ┌──────────────┴──────────────┐
-                     ↓                             ↓
-              [CLOSED Mode]              [OPEN/HALF_OPEN Mode]
-                     ↓                             ↓
-          [Valid → Silver]           [Valid → Silver (silent)]
-          [Corrupt → DLQ]            [Corrupt → DLQ (no retry)]
-                                     [Alert every N min]
-
-Ejemplo de Uso:
-    from pyspark.sql import SparkSession
-    from src.validation.models import IngestionContract
-    from src.engine.processors import UnifiedMemoryCoreProcessor
-    import yaml
-
-    spark = SparkSession.builder.appName("FarmIA-Ingest").getOrCreate()
-
-    with open("specs/control_plane/weather_domain.yaml") as f:
-        yaml_dict = yaml.safe_load(f)
-
-    config = IngestionContract(**yaml_dict)  # Fail-fast validation
-    processor = UnifiedMemoryCoreProcessor(spark, config)
-
-    # Simulación con readStream (en producción, Auto Loader)
-    df = spark.readStream.format("cloudFiles") \\
-        .options(**config.source.options) \\
-        .schema(...)  # De config.schema_validation \\
-        .load(config.source.path)
-
-    df.writeStream \\
-        .foreachBatch(processor.process_batch) \\
-        .option("checkpointLocation", ...) \\
-        .start() \\
-        .awaitTermination()
 """
 
 import logging
 import hashlib
+import re
 import threading
 import time
 from datetime import datetime, timedelta
@@ -112,7 +68,7 @@ class TimeoutError(Exception):
 
 class UnifiedMemoryCoreProcessor:
     """
-    **Procesador Central del Unified Memory Core (Data Plane)**
+    **Procesador Central Data Plane**
 
     Implementa la lógica genérica de procesamiento Spark desacoplada de negocio.
     Toda parametrización viene de IngestionContract (YAML validado por Pydantic).
@@ -121,7 +77,7 @@ class UnifiedMemoryCoreProcessor:
 
     Atributos:
         spark (SparkSession): Sesión Spark activa
-        config (IngestionContract): Configuración validada (SSoT)
+        config (IngestionContract): Configuración validada
         circuit_breaker (CircuitBreakerStatus): Estado dinámico del CB
         alert_fingerprints (Dict): Tracking de errores para Exception Masking
     """
@@ -206,7 +162,7 @@ class UnifiedMemoryCoreProcessor:
         enriched_df = df
         for meta in self.config.transformations.metadata_injection:
             validated_expr = self._validate_metadata_expr(meta.expression)
-            enriched_df = enriched_df.withColumn(meta.name, expr(validated_expr))
+            enriched_df = enriched_df.withColumn(meta.name, validated_expr)
         
         if "_batch_id" not in enriched_df.columns:
             enriched_df = enriched_df.withColumn("_batch_id", lit(batch_id))
