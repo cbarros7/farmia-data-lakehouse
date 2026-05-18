@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS gold.inventory_fact_d1 (
 )
 USING DELTA
 PARTITIONED BY (movement_date)
-DBPROPERTIES (
+TBLPROPERTIES (
     'delta.enableIcebergCompatV2' = 'true',
     'delta.universalFormat.enabledFormats' = 'iceberg',
     'delta.columnMapping.mode' = 'name',
