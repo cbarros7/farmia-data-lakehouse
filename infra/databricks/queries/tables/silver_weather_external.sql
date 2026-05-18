@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS silver.weather_external (
     `city` STRING,
     `temperature` DOUBLE,
     `humidity` DOUBLE,
-    `forecast_date` TIMESTAMP,
+    `forecast_timestamp` TIMESTAMP,
     `batch_id` STRING NOT NULL,
     `ingest_timestamp` TIMESTAMP NOT NULL,
     `event_timestamp` TIMESTAMP NOT NULL,
