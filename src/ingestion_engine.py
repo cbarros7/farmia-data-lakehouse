@@ -123,6 +123,8 @@ def main(contract_path: str):
         .start()
     
     query.awaitTermination()
+    
+    logger.info("Streaming finalizado")
 
 
 if __name__ == "__main__":
