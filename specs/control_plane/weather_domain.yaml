@@ -32,8 +32,11 @@ schema_validation:
     - name: "humidity"
       type: "DoubleType"
       nullable: true
-    - name: "forecast_date"
+    - name: "forecast_timestamp"
       type: "TimestampType"
+      nullable: false
+    - name: "forecast_date"
+      type: "DateType"
       nullable: false
 
 transformations:
@@ -51,7 +54,7 @@ transformations:
       expression: "current_timestamp()"
       datatype: "TIMESTAMP"
     - name: "_event_timestamp"
-      expression: "col(forecast_date)"
+      expression: "col(forecast_timestamp)"
       datatype: "TIMESTAMP"
     - name: "_schema_version_id"
       expression: "lit('1.0.0')"
@@ -83,10 +86,13 @@ transformations:
     - name: "_retention_ttl"
       expression: "lit('14')"
       datatype: "STRING"
+    - name: "forecast_date"
+      expression: "cast(col(forecast_timestamp) as DATE)"
+      datatype: "DATE"
 
   watermarking:
     enabled: true
-    event_time_column: "forecast_date"
+    event_time_column: "forecast_timestamp"
     delayed_threshold_minutes: 30
     allowed_lateness_minutes: 5
     max_state_bytes: 1000000000
@@ -163,8 +169,11 @@ tables_config:
         - name: "humidity"
           type: "DOUBLE"
           nullable: true
-        - name: "forecast_date"
+        - name: "forecast_timestamp"
           type: "TIMESTAMP"
+          nullable: false
+        - name: "forecast_date"
+          type: "DATE"
           nullable: false
         - name: "_rescued_data"
           type: "STRING"
@@ -222,8 +231,11 @@ tables_config:
         - name: "humidity"
           type: "DOUBLE"
           nullable: true
-        - name: "forecast_date"
+        - name: "forecast_timestamp"
           type: "TIMESTAMP"
+          nullable: false
+        - name: "forecast_date"
+          type: "DATE"
           nullable: false
       partition_by: ["city", "forecast_date"]
     
@@ -268,6 +280,9 @@ tables_config:
         - name: "humidity"
           type: "DOUBLE"
           nullable: true
-        - name: "forecast_date"
+        - name: "forecast_timestamp"
           type: "TIMESTAMP"
           nullable: true
+        - name: "forecast_date"
+          type: "DATE"
+          nullable: false
