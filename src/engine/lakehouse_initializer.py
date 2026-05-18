@@ -72,7 +72,11 @@ class LakehouseInitializer:
         for sql_file in schema_files:
             try:
                 sql_content = sql_file.read_text()
-                self.spark.sql(sql_content)
+                for statement in sql_content.split(";"):
+                    statement = statement.strip()
+                    if statement:
+                        self.spark.sql(statement)
+                # self.spark.sql(sql_content)
                 self.logger.info(f"{sql_file.name}")
             except Exception as e:
                 self.logger.error(f"{sql_file.name}: {e}")
@@ -130,5 +134,9 @@ class LakehouseInitializer:
         
         # Ejecutar DDL
         sql_content = sql_file.read_text()
-        self.spark.sql(sql_content)
+        for statement in sql_content.split(";"):
+            statement = statement.strip()
+            if statement:
+                self.spark.sql(statement)
+        # self.spark.sql(sql_content)
         self.logger.info(f"{table_name} (desde {schema_table}.sql)")

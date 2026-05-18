@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS silver.iot_sensors (
 )
 USING DELTA
 PARTITIONED BY (sensor_id, reading_timestamp)
-TBLPROPERTIES (
+DBPROPERTIES (
     'delta.enableIcebergCompatV2' = 'true',
     'delta.universalFormat.enabledFormats' = 'iceberg',
     'delta.columnMapping.mode' = 'name',
