@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS gold.weather_daily_obt (
 )
 USING DELTA
 PARTITIONED BY (date)
-TBLPROPERTIES (
+DBPROPERTIES (
     'delta.enableIcebergCompatV2' = 'true',
     'delta.universalFormat.enabledFormats' = 'iceberg',
     'delta.columnMapping.mode' = 'name',

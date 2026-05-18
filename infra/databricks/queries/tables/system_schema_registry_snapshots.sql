@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS system.schema_registry_snapshots (
 )
 USING DELTA
 PARTITIONED BY (domain)
-TBLPROPERTIES (
+DBPROPERTIES (
     'delta.enableIcebergCompatV2' = 'true',
     'delta.universalFormat.enabledFormats' = 'iceberg'
 );
