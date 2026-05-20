@@ -60,7 +60,7 @@ transformations:
       expression: "current_timestamp()"
       datatype: "TIMESTAMP"
     - name: "_event_timestamp"
-      expression: "col(last_updated)"
+      expression: "col('last_updated_timestamp')"
       datatype: "TIMESTAMP"
     - name: "_schema_version_id"
       expression: "lit('1.0.0')"

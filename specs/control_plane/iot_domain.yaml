@@ -63,7 +63,7 @@ transformations:
       expression: "current_timestamp()"
       datatype: "TIMESTAMP"
     - name: "_event_timestamp"
-      expression: "col(reading_timestamp)"
+      expression: "col('reading_timestamp')"
       datatype: "TIMESTAMP"
     - name: "_schema_version_id"
       expression: "lit('1.0.0')"
