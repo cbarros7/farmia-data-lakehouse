@@ -22,10 +22,10 @@ output "eventhub_name" {
   value = azurerm_eventhub.telemetry.name
 }
 
-output "databricks_workspace_url" {
-  value = azurerm_databricks_workspace.compute.workspace_url
-}
+# output "databricks_workspace_url" {
+#   value = azurerm_databricks_workspace.compute.workspace_url
+# }
 
-output "databricks_workspace_id" {
-  value = azurerm_databricks_workspace.compute.id
-}
+# output "databricks_workspace_id" {
+#   value = azurerm_databricks_workspace.compute.id
+# }

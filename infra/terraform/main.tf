@@ -44,6 +44,17 @@ resource "azurerm_eventhub_namespace" "telemetry" {
   sku                 = "Standard"
   capacity            = 1
   tags                = var.tags
+
+  identity {
+    type = "SystemAssigned"
+  }
+}
+
+# Le damos permiso al Event Hub para guardar los archivos en el Storage Account
+resource "azurerm_role_assignment" "eh_to_lake" {
+  scope                = azurerm_storage_account.adls.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = azurerm_eventhub_namespace.telemetry.identity[0].principal_id
 }
 
 resource "azurerm_eventhub" "telemetry" {
@@ -52,6 +63,8 @@ resource "azurerm_eventhub" "telemetry" {
   resource_group_name = azurerm_resource_group.core.name
   partition_count     = 2
   message_retention   = 1
+
+  depends_on = [azurerm_role_assignment.eh_to_lake]
 
   capture_description {
     enabled             = true
@@ -68,10 +81,21 @@ resource "azurerm_eventhub" "telemetry" {
   }
 }
 
-resource "azurerm_databricks_workspace" "compute" {
-  name                = var.databricks_workspace_name
+# Regla de autorización que SOLO permite enviar datos (Producer)
+resource "azurerm_eventhub_authorization_rule" "producer_rule" {
+  name                = "auth-producer-script"
+  namespace_name      = azurerm_eventhub_namespace.telemetry.name
+  eventhub_name       = azurerm_eventhub.telemetry.name
   resource_group_name = azurerm_resource_group.core.name
-  location            = azurerm_resource_group.core.location
-  sku                 = "premium"
-  tags                = var.tags
+  listen              = false
+  send                = true
+  manage              = false
 }
+
+#resource "azurerm_databricks_workspace" "compute" {
+#  name                = var.databricks_workspace_name
+#  resource_group_name = azurerm_resource_group.core.name
+#  location            = azurerm_resource_group.core.location
+#  sku                 = "premium"
+#  tags                = var.tags
+#}

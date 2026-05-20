@@ -161,7 +161,8 @@ class UnifiedMemoryCoreProcessor:
     def _inject_metadata(self, df: DataFrame, batch_id: int) -> DataFrame:
         enriched_df = df
         for meta in self.config.transformations.metadata_injection:
-            validated_expr = self._validate_metadata_expr(meta.expression)
+            # validated_expr = self._validate_metadata_expr(meta.expression)
+            validated_expr = self._eval_metadata_expr(meta.expression, batch_id)
             enriched_df = enriched_df.withColumn(meta.name, validated_expr)
         
         if "_batch_id" not in enriched_df.columns:
@@ -173,11 +174,33 @@ class UnifiedMemoryCoreProcessor:
         
         return enriched_df
 
-    def _validate_metadata_expr(self, expr_str: str):
-        allowed_funcs = {"lit", "current_timestamp", "col", "current_date", "unix_timestamp"}
-        if not any(f"({f}(" in expr_str or expr_str.startswith(f) for f in allowed_funcs):
-            raise ValueError(f"Expresión no permitida: {expr_str}")
-        return expr(expr_str)
+    # def _validate_metadata_expr(self, expr_str: str):
+    #     allowed_funcs = {"lit", "current_timestamp", "col", "current_date", "unix_timestamp"}
+    #     if not any(f"({f}(" in expr_str or expr_str.startswith(f) for f in allowed_funcs):
+    #         raise ValueError(f"Expresión no permitida: {expr_str}")
+    #     return expr(expr_str)
+    
+    def _eval_metadata_expr(self, expr_str: str, batch_id: int):
+        """Evaluar expresión PySpark dinámicamente desde YAML."""
+        class _FallbackDict(dict):
+            def __missing__(self, key):
+                return key  # Nombres no reconocidos → string (para col())
+
+        allowed_namespace = _FallbackDict({
+            "lit": lit,
+            "col": col,
+            "current_timestamp": current_timestamp,
+            "to_timestamp": to_timestamp,
+            "coalesce": coalesce,
+            "when": when,
+            "expr": expr,
+            "batch_id": batch_id,
+        })
+
+        try:
+            return eval(expr_str, {"__builtins__": {}}, allowed_namespace)
+        except Exception as e:
+            raise ValueError(f"Expresión inválida '{expr_str}': {e}")
 
     def _handle_late_data(self, df: DataFrame, batch_id: int) -> DataFrame:
         if not self.config.transformations.watermarking or not self.config.transformations.watermarking.enabled:
