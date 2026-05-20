@@ -333,6 +333,9 @@ class UnifiedMemoryCoreProcessor:
             logger.debug("Sin datos válidos para Silver")
             return
 
+        # Remover columna _rescued_data (solo para Bronze/Quarantine, no Silver)
+        df = df.drop(self.config.schema_validation.rescued_data_column)
+
         table_name = self.config.sink.table_name
         mode = self.config.sink.mode
 
@@ -357,7 +360,7 @@ class UnifiedMemoryCoreProcessor:
 
     def _write_merge_into(self, df: DataFrame, table_name: str) -> None:
         """MERGE_INTO: upsert idempotente para ventas/inventario."""
-        merge_keys = self.config.sink.merge_key
+        merge_keys = self.config.sink.merge_keys
         if not merge_keys:
             raise ValueError(f"merge_key obligatorio: {table_name}")
 
@@ -367,15 +370,17 @@ class UnifiedMemoryCoreProcessor:
         insert_cols = ", ".join(df.columns)
         insert_values = ", ".join([f"s.{c}" for c in df.columns])
 
+        # Registrar como vista global para persistir en la sesión Spark
+        df.createOrReplaceGlobalTempView("source_temp_merge")
+        
         merge_sql = f"""
             MERGE INTO {table_name} t
-            USING (SELECT * FROM source_temp) s
+            USING global_temp.source_temp_merge s
             ON {on_clause}
             WHEN MATCHED THEN UPDATE SET {update_clause}
             WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({insert_values})
         """
 
-        df.createOrReplaceTempView("source_temp")
         self.spark.sql(merge_sql)
         logger.debug(f"MERGE_INTO exitoso: {table_name}")
 
