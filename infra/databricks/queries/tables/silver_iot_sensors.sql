@@ -24,8 +24,6 @@ CREATE TABLE IF NOT EXISTS silver.iot_sensors (
 USING DELTA
 PARTITIONED BY (sensor_id, reading_date)
 TBLPROPERTIES (
-    'delta.enableIcebergCompatV2' = 'true',
-    'delta.universalFormat.enabledFormats' = 'iceberg',
     'delta.columnMapping.mode' = 'name',
     'retention_ttl_days' = '14',
     'idempotence_mode' = 'APPEND'

@@ -10,8 +10,6 @@ CREATE TABLE IF NOT EXISTS gold.sales_fact_d1 (
 USING DELTA
 PARTITIONED BY (transaction_date)
 TBLPROPERTIES (
-    'delta.enableIcebergCompatV2' = 'true',
-    'delta.universalFormat.enabledFormats' = 'iceberg',
     'delta.columnMapping.mode' = 'name',
     'sync_frequency' = 'D-1_nocturno'
 );

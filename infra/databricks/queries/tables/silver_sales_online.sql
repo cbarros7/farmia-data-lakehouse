@@ -24,8 +24,6 @@ CREATE TABLE IF NOT EXISTS silver.sales_online (
 USING DELTA
 PARTITIONED BY (transaction_date)
 TBLPROPERTIES (
-    'delta.enableIcebergCompatV2' = 'true',
-    'delta.universalFormat.enabledFormats' = 'iceberg',
     'delta.columnMapping.mode' = 'name',
     'idempotence_mode' = 'MERGE_INTO'
 );

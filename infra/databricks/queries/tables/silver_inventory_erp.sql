@@ -23,8 +23,6 @@ CREATE TABLE IF NOT EXISTS silver.inventory_erp (
 USING DELTA
 PARTITIONED BY (last_updated)
 TBLPROPERTIES (
-    'delta.enableIcebergCompatV2' = 'true',
-    'delta.universalFormat.enabledFormats' = 'iceberg',
     'delta.columnMapping.mode' = 'name',
     'idempotence_mode' = 'MERGE_INTO'
 );
