@@ -52,7 +52,8 @@ def build_auto_loader_stream(spark: SparkSession, config: IngestionContract) -> 
         "cloudFiles.schemaEvolutionMode": source.options.get("cloudFiles.schemaEvolutionMode", "none"),
         "cloudFiles.rescuedDataColumn": config.schema_validation.rescued_data_column,
         "cloudFiles.maxBytesPerTrigger": source.options.get("cloudFiles.maxBytesPerTrigger", "134217728"),
-        "cloudFiles.inferColumnTypes": source.options.get("cloudFiles.inferColumnTypes", "false")
+        "cloudFiles.inferColumnTypes": source.options.get("cloudFiles.inferColumnTypes", "false"),
+        # "cloudFiles.validateOptions": "false"
     }
     for key, val in source.options.items():
         if key.startswith("cloudFiles."):
