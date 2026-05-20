@@ -3,7 +3,7 @@
 Fail-Fast: Valida YAML antes de provisioning.
 """
 
-from pydantic import BaseModel, Field, validator, root_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import List, Optional, Dict, Any, Literal
 from enum import Enum
 
@@ -57,7 +57,8 @@ class SourceConfig(BaseModel):
         description="Opciones CloudFiles (cloudFiles.useIncrementalListing, cloudFiles.maxBytesPerTrigger, etc.)"
     )
 
-    @validator("path")
+    @field_validator("path")
+    @classmethod
     def validate_adls_path(cls, v: str) -> str:
         """Validar que path sea una ruta ADLS Gen2 válida."""
         if not v.startswith("abfss://"):
@@ -157,9 +158,11 @@ class RetryPolicy(BaseModel):
         description="¿Añadir jitter para evitar thundering herd? (recomendado True)"
     )
 
-    @validator("max_interval_seconds")
-    def validate_max_greater_than_initial(cls, v: float, values: Dict[str, Any]) -> float:
+    @field_validator("max_interval_seconds")
+    @classmethod
+    def validate_max_greater_than_initial(cls, v: float, info) -> float:
         """Asegurar que max_interval >= initial_interval."""
+        values = info.data
         if "initial_interval_seconds" in values and v < values["initial_interval_seconds"]:
             raise ValueError(
                 f"max_interval_seconds ({v}) must be >= initial_interval_seconds ({values['initial_interval_seconds']})"
@@ -170,13 +173,14 @@ class RetryPolicy(BaseModel):
 class LateData(BaseModel):
     """Gestión de datos tardíos: watermarking con tolerancia explícita."""
     enabled: bool = Field(True, description="¿Habilitar captura de late data?")
-    max_delay_minutes: int = Field(
-        ...,
+    # When enabled is False these can be omitted; when enabled is True they must be provided
+    max_delay_minutes: Optional[int] = Field(
+        None,
         ge=5,
         description="Máximo retraso permitido (ej. 30min)"
     )
-    table_name: str = Field(
-        ...,
+    table_name: Optional[str] = Field(
+        None,
         description="Tabla Delta para almacenar late data (ej. bronze.weather_late_data)"
     )
     storage_days: int = Field(
@@ -184,6 +188,16 @@ class LateData(BaseModel):
         ge=1,
         description="Días de retención de late data antes de purga"
     )
+
+    @model_validator(mode='after')
+    def require_fields_if_enabled(self) -> 'LateData':
+        """Si enabled es True, asegurar que max_delay_minutes y table_name estén presentes."""
+        if self.enabled:
+            if self.max_delay_minutes is None:
+                raise ValueError("max_delay_minutes is required when late data is enabled")
+            if self.table_name in (None, ""):
+                raise ValueError("table_name is required when late data is enabled")
+        return self
 
 
 class ExceptionMasking(BaseModel):
@@ -237,7 +251,8 @@ class MetadataInjection(BaseModel):
     )
     datatype: Optional[str] = Field(None, description="Tipo esperado (ej. BIGINT, STRING, TIMESTAMP)")
 
-    @validator("expression")
+    @field_validator("expression")
+    @classmethod
     def validate_safe_expression(cls, v: str) -> str:
         """Prevenir SQL injection: solo funciones allowlist permitidas."""
         import re
@@ -309,7 +324,8 @@ class TransformationsConfig(BaseModel):
         description="Anti-Corruption Layer: parametrización de APIs externas (zero-copy masking)"
     )
 
-    @validator("metadata_injection")
+    @field_validator("metadata_injection")
+    @classmethod
     def validate_metadata_not_empty(cls, v: List[MetadataInjection]) -> List[MetadataInjection]:
         """Validar que metadata_injection no esté vacío."""
         if not v or len(v) == 0:
@@ -333,7 +349,7 @@ class SinkConfig(BaseModel):
         default_factory=list,
         description="Columnas de particionamiento (ej. [city, forecast_date])"
     )
-    merge_key: Optional[List[str]] = Field(
+    merge_keys: Optional[List[str]] = Field(
         None,
         description="Columnas de clave para MERGE (obligatorio si mode=merge_into)"
     )
@@ -346,34 +362,19 @@ class SinkConfig(BaseModel):
         description="Optimizaciones (z_order_by, vacuum_days, compaction_interval)"
     )
 
-    @root_validator
-    def validate_domain_sink_mode(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+    @model_validator(mode='after')
+    def validate_domain_sink_mode(self) -> 'SinkConfig':
         """Validar Idempotencia Dinámica: emparejar dominio con estrategia."""
-        pipeline = values.get("pipeline_info")
-        sink = values.get("sink")
-        
-        if pipeline and sink:
-            domain = pipeline.domain
-            mode = sink.mode
-            
-            high_volume_domains = {DomainType.SALES_ONLINE.value, DomainType.INVENTORY_ERP.value}
-            append_only_domains = {DomainType.WEATHER_EXTERNAL.value, DomainType.IOT_SENSORS.value}
-            
-            if domain in high_volume_domains and mode != SinkMode.MERGE_INTO:
-                raise ValueError(f"Dominio {domain} REQUIERE sink.mode = 'merge_into'")
-            if domain in append_only_domains and mode != SinkMode.APPEND:
-                raise ValueError(f"Dominio {domain} REQUIERE sink.mode = 'append'")
-                
-        return values
+        return self
 
-    @root_validator
-    def validate_merge_key_for_merge_into(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        """Si mode=merge_into, merge_key es obligatorio."""
-        if values.get("mode") == SinkMode.MERGE_INTO and not values.get("merge_key"):
+    @model_validator(mode='after')
+    def validate_merge_key_for_merge_into(self) -> 'SinkConfig':
+        """Si mode=merge_into, merge_keys es obligatorio."""
+        if self.mode == SinkMode.MERGE_INTO and not self.merge_keys:
             raise ValueError(
-                "merge_key es obligatorio cuando mode='merge_into'"
+                "merge_keys es obligatorio cuando mode='merge_into'"
             )
-        return values
+        return self
 
 
 class TableSchema(BaseModel):
@@ -415,3 +416,19 @@ class IngestionContract(BaseModel):
     sink: SinkConfig = Field(..., description="Estrategia idempotente de escritura")
     tables_config: TablesConfig = Field(..., description="Definición de todas las tablas con esquemas")
     checkpoint_location: str = Field(..., description="Ruta ADLS Gen2 para checkpoints de streaming")
+
+    @model_validator(mode='after')
+    def validate_domain_sink_mode(self) -> 'IngestionContract':
+        """Validar Idempotencia Dinámica: emparejar dominio con estrategia."""
+        domain = self.pipeline_info.domain
+        mode = self.sink.mode
+        
+        high_volume_domains = {DomainType.SALES_ONLINE.value, DomainType.INVENTORY_ERP.value}
+        append_only_domains = {DomainType.WEATHER_EXTERNAL.value, DomainType.IOT_SENSORS.value}
+        
+        if domain in high_volume_domains and mode != SinkMode.MERGE_INTO:
+            raise ValueError(f"Dominio {domain} REQUIERE sink.mode = 'merge_into'")
+        if domain in append_only_domains and mode != SinkMode.APPEND:
+            raise ValueError(f"Dominio {domain} REQUIERE sink.mode = 'append'")
+                
+        return self
