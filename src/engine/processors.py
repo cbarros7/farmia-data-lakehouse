@@ -29,8 +29,9 @@ from dataclasses import dataclass
 from pyspark.sql import DataFrame, SparkSession, Row
 from pyspark.sql.functions import (
     col, lit, current_timestamp, to_timestamp, max as spark_max,
-    sum as spark_sum, count, when, expr, abs as spark_abs, coalesce
+    sum as spark_sum, count, when, expr, abs as spark_abs, coalesce, cast
 )
+from pyspark.sql.types import DateType, StringType, IntegerType, DoubleType, TimestampType
 from pyspark import StorageLevel
 import tenacity
 from tenacity import (
@@ -189,12 +190,18 @@ class UnifiedMemoryCoreProcessor:
         allowed_namespace = _FallbackDict({
             "lit": lit,
             "col": col,
+            "cast": cast,
             "current_timestamp": current_timestamp,
             "to_timestamp": to_timestamp,
             "coalesce": coalesce,
             "when": when,
             "expr": expr,
             "batch_id": batch_id,
+            "DateType": DateType,
+            "StringType": StringType,
+            "IntegerType": IntegerType,
+            "DoubleType": DoubleType,
+            "TimestampType": TimestampType,
         })
 
         try:
