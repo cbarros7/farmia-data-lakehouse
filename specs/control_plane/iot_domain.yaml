@@ -96,7 +96,7 @@ transformations:
       expression: "lit('14')"
       datatype: "STRING"
     - name: "reading_date"
-      expression: "cast(col(reading_timestamp) as DATE)"
+      expression: "col('reading_timestamp').cast(DateType())"
       datatype: "DATE"
 
   watermarking:

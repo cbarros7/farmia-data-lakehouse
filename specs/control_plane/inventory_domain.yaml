@@ -93,7 +93,7 @@ transformations:
       expression: "lit('indefinite')"
       datatype: "STRING"
     - name: "last_updated"
-      expression: "cast(col(last_updated_timestamp) as DATE)"
+      expression: "col('last_updated_timestamp').cast(DateType())"
       datatype: "DATE"
 
 sink:

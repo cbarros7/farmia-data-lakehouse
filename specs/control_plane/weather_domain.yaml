@@ -87,7 +87,7 @@ transformations:
       expression: "lit('14')"
       datatype: "STRING"
     - name: "forecast_date"
-      expression: "cast(col(forecast_timestamp) as DATE)"
+      expression: "col('forecast_timestamp').cast(DateType())"
       datatype: "DATE"
 
   watermarking:

@@ -105,7 +105,7 @@ transformations:
       expression: "lit('indefinite')"
       datatype: "STRING"
     - name: "transaction_date"
-      expression: "cast(col(transaction_timestamp) as DATE)"
+      expression: "col('transaction_timestamp').cast(DateType())"
       datatype: "DATE"
 
 sink:

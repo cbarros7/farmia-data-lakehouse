@@ -6,7 +6,8 @@ import argparse
 import yaml
 import logging
 from pathlib import Path
-
+from dotenv import load_dotenv
+import os
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType, TimestampType, IntegerType, DateType
 
@@ -18,6 +19,20 @@ from src.engine.lakehouse_initializer import LakehouseInitializer
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s - %(message)s")
 logger = logging.getLogger(__name__)
 
+load_dotenv()
+
+# Blob storage
+STORAGE_ACCOUNT_NAME = os.getenv("STORAGE_ACCOUNT_NAME") 
+SECRET_SCOPE_NAME = os.getenv("SECRET_SCOPE_NAME")
+SECRET_KEY_NAME = os.getenv("SECRET_KEY_NAME")
+
+# Databricks busca encriptadamente en Azure Key Vault en tiempo de ejecución
+STORAGE_ACCOUNT_KEY = dbutils.secrets.get(scope=SECRET_SCOPE_NAME, key=SECRET_KEY_NAME)
+
+spark.conf.set(
+    f"fs.azure.account.key.{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net", 
+    STORAGE_ACCOUNT_KEY
+)
 
 def load_config_from_yaml(yaml_path: str) -> IngestionContract:
     logger.info(f"Cargando {yaml_path}")
@@ -52,7 +67,8 @@ def build_auto_loader_stream(spark: SparkSession, config: IngestionContract) -> 
         "cloudFiles.schemaEvolutionMode": source.options.get("cloudFiles.schemaEvolutionMode", "none"),
         "cloudFiles.rescuedDataColumn": config.schema_validation.rescued_data_column,
         "cloudFiles.maxBytesPerTrigger": source.options.get("cloudFiles.maxBytesPerTrigger", "134217728"),
-        "cloudFiles.inferColumnTypes": source.options.get("cloudFiles.inferColumnTypes", "false")
+        "cloudFiles.inferColumnTypes": source.options.get("cloudFiles.inferColumnTypes", "false"),
+        # "cloudFiles.validateOptions": "false"
     }
     for key, val in source.options.items():
         if key.startswith("cloudFiles."):
