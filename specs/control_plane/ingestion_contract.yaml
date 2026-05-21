@@ -26,5 +26,3 @@ runtime:
 control_plane:
   yaml_storage: adls_gen2
   incremental_loader: databricks_auto_loader
-finops_gold:
-  preaggregation_layer: silver
