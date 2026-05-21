@@ -1,7 +1,9 @@
 # Documento Técnico de Arquitectura de datos escalable para FarmIA
 
 **Autor:** Carlos Barros  
+
 **Fecha:** Mayo 2026
+
 **GitHub**: [Link](https://github.com/cbarros7/farmia-data-lakehouse)
 
 ## 1. Resumen ejecutivo y restricciones físicas
