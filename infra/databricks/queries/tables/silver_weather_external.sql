@@ -26,4 +26,4 @@ TBLPROPERTIES (
     'idempotence_mode' = 'APPEND'
 );
 
-COMMENT ON TABLE silver.weather_external IS 'Telemetría meteorológica consolidada. TTL: 14 días post-agg. Iceberg compatible para Trino.';
+COMMENT ON TABLE silver.weather_external IS 'Telemetría meteorológica consolidada. TTL: 14 días post-agg. Iceberg compatible.';

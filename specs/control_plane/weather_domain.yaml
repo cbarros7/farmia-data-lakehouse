@@ -127,8 +127,13 @@ dlq:
   quarantine_table: "bronze.weather_quarantine"
   late_data:
     enabled: true
+    max_delay_minutes: 30
     table_name: "bronze.weather_late_data"
     storage_days: 14
+  
+  retry_policy:
+    strategy: "exponential_backoff"
+    max_retries: 3
   
   circuit_breaker:
     max_error_percentage: 5

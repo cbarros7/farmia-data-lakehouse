@@ -28,4 +28,4 @@ TBLPROPERTIES (
     'idempotence_mode' = 'MERGE_INTO'
 );
 
-COMMENT ON TABLE silver.sales_online IS 'Fact table: Transacciones e-commerce. Histórico ilimitado. Star Schema compatible Trino.';
+COMMENT ON TABLE silver.sales_online IS 'Fact table: Transacciones e-commerce. Histórico ilimitado. Star Schema.';

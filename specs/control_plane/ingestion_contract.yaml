@@ -27,5 +27,4 @@ control_plane:
   yaml_storage: adls_gen2
   incremental_loader: databricks_auto_loader
 finops_gold:
-  trino_sync: d_minus_1_background_batch
   preaggregation_layer: silver

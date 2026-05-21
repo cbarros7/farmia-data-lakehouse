@@ -14,4 +14,4 @@ TBLPROPERTIES (
     'sync_frequency' = 'D-1_nocturno'
 );
 
-COMMENT ON TABLE gold.sales_fact_d1 IS 'Fact table: Venta de transacciones consolidadas D-1. Star Schema para Trino.';
+COMMENT ON TABLE gold.sales_fact_d1 IS 'Fact table: Venta de transacciones consolidadas D-1. Star Schema.';
