@@ -7,6 +7,13 @@ import sys
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -82,31 +89,11 @@ class ControlPlane(BaseModel):
         return v
 
 
-class FinOpsGold(BaseModel):
-    trino_sync: str
-    preaggregation_layer: str
-
-    @field_validator("trino_sync")
-    @classmethod
-    def d1(cls, v: str) -> str:
-        if "d_minus_1" not in v.lower() and "d-1" not in v.lower():
-            raise ValueError("Trino debe seguir la sincronización por lotes en segundo plano D-1.")
-        return v
-
-    @field_validator("preaggregation_layer")
-    @classmethod
-    def silver(cls, v: str) -> str:
-        if v.lower() != "silver":
-            raise ValueError("El trabajo pesado debe permanecer en Silver, no en Gold/Trino.")
-        return v
-
-
 class IngestionContract(BaseModel):
     schema_version: str
     architectural_quantums: List[Quantum]
     runtime: Runtime
     control_plane: ControlPlane
-    finops_gold: FinOpsGold
 
     @field_validator("architectural_quantums")
     @classmethod
@@ -247,28 +234,28 @@ def main() -> int:
     # 1. Validar ingestion_contract.yaml
     spec_path = root / "specs" / "control_plane" / "ingestion_contract.yaml"
     if not spec_path.is_file() or spec_path.stat().st_size == 0:
-        print(f"ERROR: especificación faltante o vacía en {spec_path}", file=sys.stderr)
+        logger.error(f"Especificación faltante o vacía en {spec_path}")
         return 2
 
     try:
         raw = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
         IngestionContract.model_validate(raw)
-        print(f"Validado {spec_path.relative_to(root)}")
+        logger.info(f"Validado {spec_path.relative_to(root)}")
     except Exception as e:
-        print(f"ERROR: {spec_path.relative_to(root)}: {str(e)}", file=sys.stderr)
+        logger.error(f"{spec_path.relative_to(root)}: {str(e)}")
         return 2
 
     # 2. Validar todos los archivos *_domain.yaml
     domain_errors = validate_all_domain_contracts(root)
     if domain_errors:
         for error in domain_errors:
-            print(f"ERROR: {error}", file=sys.stderr)
+            logger.error(error)
         return 2
 
     domain_files_count = len(list((root / "specs" / "control_plane").glob("*_domain.yaml")))
-    print(f"Validados {domain_files_count} contrato(s) de dominio")
+    logger.info(f"Validados {domain_files_count} contrato(s) de dominio")
 
-    print("\nTodos los contratos fueron validados exitosamente")
+    logger.info("Todos los contratos fueron validados exitosamente")
     return 0
 
 

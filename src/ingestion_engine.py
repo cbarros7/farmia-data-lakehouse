@@ -39,7 +39,8 @@ def load_config_from_yaml(yaml_path: str) -> IngestionContract:
     with open(yaml_path) as f:
         yaml_dict = yaml.safe_load(f)
     config = IngestionContract(**yaml_dict)
-    logger.info(f"✓ {config.pipeline_info.domain} v{config.pipeline_info.version}")
+    logger.info("Validación exitosa (Pydantic)")
+    logger.info(f"{config.pipeline_info.domain} v{config.pipeline_info.version}")
     return config
 
 
@@ -86,29 +87,12 @@ def build_auto_loader_stream(spark: SparkSession, config: IngestionContract) -> 
     return df_stream
 
 
-def setup_spark_session(app_name: str) -> SparkSession:
-    spark = SparkSession.builder \
-        .appName(app_name) \
-        .config("spark.sql.adaptive.enabled", "true") \
-        .config("spark.sql.adaptive.coalescePartitions.enabled", "true") \
-        .config("spark.sql.streaming.schemaInference", "false") \
-        .config("spark.sql.adaptive.skewJoin.enabled", "true") \
-        .config("spark.sql.shuffle.partitions", "auto") \
-        .config("spark.databricks.delta.optimizeWrite.enabled", "true") \
-        .config("spark.databricks.delta.autoCompact.enabled", "true") \
-        .getOrCreate()
-    return spark
-
-
 def main(contract_path: str):
-    logger.info("=" * 70)
-    logger.info("MOTOR INGESTA FARMIA - Auto Loader")
-    logger.info("=" * 70)
+    logger.info(f"[START] Iniciando Ingesta: {contract_path}")
     
     # Task 0: Validación + Inicialización
     config = load_config_from_yaml(contract_path)
-    
-    spark = setup_spark_session(f"FarmIA-{config.pipeline_info.domain}")
+    spark = SparkSession.builder.appName(f"FarmIA-{config.pipeline_info.domain}").getOrCreate()
     logger.info("SparkSession iniciada")
     
     try:
@@ -127,21 +111,18 @@ def main(contract_path: str):
     
     df_stream = build_auto_loader_stream(spark, config)
     
-    logger.info(f"\n[INICIANDO STREAMING] {config.pipeline_info.domain}")
+    logger.info(f"\n[INICIANDO PROCESAMIENTO] {config.pipeline_info.domain}")
     logger.info(f"Checkpoint: {config.checkpoint_location}")
     logger.info(f"Sink: {config.sink.table_name} ({config.sink.mode.value})")
-    logger.info("=" * 70)
-    
     query = df_stream \
         .writeStream \
         .foreachBatch(processor.process_batch) \
         .option("checkpointLocation", config.checkpoint_location) \
+        .trigger(once=True) \
         .start()
     
     query.awaitTermination()
-    
-    logger.info("Streaming finalizado")
-
+    logger.info("[SUCCESS] Procesamiento completado - Auto Loader se detuvo")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="FarmIA Motor de Ingesta")

@@ -13,4 +13,4 @@ TBLPROPERTIES (
     'sync_frequency' = 'D-1_nocturno'
 );
 
-COMMENT ON TABLE gold.inventory_fact_d1 IS 'Fact table: Movimientos inventory consolidados D-1. Star Schema para Trino.';
+COMMENT ON TABLE gold.inventory_fact_d1 IS 'Fact table: Movimientos inventory consolidados D-1. Star Schema.';

@@ -103,7 +103,6 @@ sink:
   format: "delta"
   mode: "append"
   table_name: "silver.weather_external"
-  merge_keys: []
   partition_by: ["city", "forecast_date"]
   lifecycle:
     ttl: "14"
@@ -124,11 +123,15 @@ sink:
       vacuum_days: 7
 
 dlq:
-  quarantine_table: "bronze.weather_quarantine"
   late_data:
     enabled: true
+    max_delay_minutes: 30
     table_name: "bronze.weather_late_data"
     storage_days: 14
+  
+  retry_policy:
+    strategy: "exponential_backoff"
+    max_retries: 3
   
   circuit_breaker:
     max_error_percentage: 5
@@ -139,9 +142,8 @@ dlq:
   
   exception_masking:
     enabled: true
-    persistence_table: "system.alert_logs"
-    silence_duration_hours: 4
-    alert_threshold_count: 5
+    silence_expires_hours: 4
+    alert_logs_table: "system.alert_logs"
   
   watchdog:
     enabled: true
@@ -149,140 +151,3 @@ dlq:
     check_interval_seconds: 30
     alert_action: "warn_no_fail"
 
-tables_config:
-  tables:
-    - name: "bronze.weather_external"
-      layer: "bronze"
-      columns:
-        - name: "_file_path"
-          type: "STRING"
-          nullable: false
-        - name: "_ingest_timestamp"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "city"
-          type: "STRING"
-          nullable: false
-        - name: "temperature"
-          type: "DOUBLE"
-          nullable: true
-        - name: "humidity"
-          type: "DOUBLE"
-          nullable: true
-        - name: "forecast_timestamp"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "forecast_date"
-          type: "DATE"
-          nullable: false
-        - name: "_rescued_data"
-          type: "STRING"
-          nullable: true
-      partition_by: ["forecast_date"]
-    
-    - name: "silver.weather_external"
-      layer: "silver"
-      columns:
-        - name: "_batch_id"
-          type: "BIGINT"
-          nullable: false
-        - name: "_ingest_timestamp"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "_event_timestamp"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "_schema_version_id"
-          type: "STRING"
-          nullable: false
-        - name: "_pipeline_git_hash"
-          type: "STRING"
-          nullable: false
-        - name: "_source_system"
-          type: "STRING"
-          nullable: false
-        - name: "_file_path"
-          type: "STRING"
-          nullable: false
-        - name: "_execution_user_id"
-          type: "STRING"
-          nullable: false
-        - name: "_environment_id"
-          type: "STRING"
-          nullable: false
-        - name: "_cluster_id"
-          type: "STRING"
-          nullable: false
-        - name: "_processing_library_version"
-          type: "STRING"
-          nullable: false
-        - name: "_operation_type"
-          type: "STRING"
-          nullable: false
-        - name: "_retention_ttl"
-          type: "STRING"
-          nullable: false
-        - name: "city"
-          type: "STRING"
-          nullable: false
-        - name: "temperature"
-          type: "DOUBLE"
-          nullable: true
-        - name: "humidity"
-          type: "DOUBLE"
-          nullable: true
-        - name: "forecast_timestamp"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "forecast_date"
-          type: "DATE"
-          nullable: false
-      partition_by: ["city", "forecast_date"]
-    
-    - name: "bronze.weather_quarantine"
-      layer: "quarantine"
-      columns:
-        - name: "_batch_id"
-          type: "BIGINT"
-          nullable: false
-        - name: "_ingest_timestamp"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "_reason"
-          type: "STRING"
-          nullable: true
-        - name: "_raw_data"
-          type: "STRING"
-          nullable: true
-      partition_by: ["_ingest_timestamp"]
-    
-    - name: "bronze.weather_late_data"
-      layer: "late_data"
-      columns:
-        - name: "_late_data_received_timestamp"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "_watermark_at_arrival"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "_delay_minutes"
-          type: "INT"
-          nullable: false
-        - name: "_reason"
-          type: "STRING"
-          nullable: true
-        - name: "city"
-          type: "STRING"
-          nullable: true
-        - name: "temperature"
-          type: "DOUBLE"
-          nullable: true
-        - name: "humidity"
-          type: "DOUBLE"
-          nullable: true
-        - name: "forecast_timestamp"
-          type: "TIMESTAMP"
-          nullable: true
-        - name: "forecast_date"
-          type: "DATE"
-          nullable: false

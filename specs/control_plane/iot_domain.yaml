@@ -112,7 +112,6 @@ sink:
   format: "delta"
   mode: "append"
   table_name: "silver.iot_sensors"
-  merge_keys: []
   partition_by: ["sensor_id", "reading_date"]
   lifecycle:
     ttl: "14"
@@ -139,7 +138,6 @@ sink:
       vacuum_days: 7
 
 dlq:
-  quarantine_table: "bronze.iot_quarantine"
   late_data:
     enabled: true
     max_delay_minutes: 30
@@ -155,9 +153,8 @@ dlq:
 
   exception_masking:
     enabled: true
-    persistence_table: "system.alert_logs"
-    silence_duration_hours: 4
-    alert_threshold_count: 5
+    silence_expires_hours: 4
+    alert_logs_table: "system.alert_logs"
 
   watchdog:
     enabled: true
@@ -169,170 +166,3 @@ dlq:
     strategy: "exponential_backoff"
     max_retries: 3
   
-tables_config:
-  tables:
-    - name: "bronze.iot_sensors"
-      layer: "bronze"
-      columns:
-        - name: "_file_path"
-          type: "STRING"
-          nullable: false
-        - name: "_ingest_timestamp"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "sensor_id"
-          type: "STRING"
-          nullable: false
-        - name: "location_id"
-          type: "STRING"
-          nullable: false
-        - name: "temperature"
-          type: "DOUBLE"
-          nullable: true
-        - name: "humidity"
-          type: "DOUBLE"
-          nullable: true
-        - name: "ph"
-          type: "DOUBLE"
-          nullable: true
-        - name: "soil_moisture"
-          type: "DOUBLE"
-          nullable: true
-        - name: "reading_timestamp"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "_rescued_data"
-          type: "STRING"
-          nullable: true
-        - name: "reading_date"
-          type: "DateType"
-          nullable: false
-      partition_by: ["reading_date"]
-
-    - name: "silver.iot_sensors"
-      layer: "silver"
-      columns:
-        - name: "_batch_id"
-          type: "BIGINT"
-          nullable: false
-        - name: "_ingest_timestamp"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "_event_timestamp"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "_schema_version_id"
-          type: "STRING"
-          nullable: false
-        - name: "_pipeline_git_hash"
-          type: "STRING"
-          nullable: false
-        - name: "_source_system"
-          type: "STRING"
-          nullable: false
-        - name: "_file_path"
-          type: "STRING"
-          nullable: false
-        - name: "_execution_user_id"
-          type: "STRING"
-          nullable: false
-        - name: "_environment_id"
-          type: "STRING"
-          nullable: false
-        - name: "_cluster_id"
-          type: "STRING"
-          nullable: false
-        - name: "_processing_library_version"
-          type: "STRING"
-          nullable: false
-        - name: "_operation_type"
-          type: "STRING"
-          nullable: false
-        - name: "_retention_ttl"
-          type: "STRING"
-          nullable: false
-        - name: "sensor_id"
-          type: "STRING"
-          nullable: false
-        - name: "location_id"
-          type: "STRING"
-          nullable: false
-        - name: "temperature"
-          type: "DOUBLE"
-          nullable: true
-        - name: "humidity"
-          type: "DOUBLE"
-          nullable: true
-        - name: "ph"
-          type: "DOUBLE"
-          nullable: true
-        - name: "soil_moisture"
-          type: "DOUBLE"
-          nullable: true
-        - name: "reading_timestamp"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "reading_date"
-          type: "DATE"
-          nullable: false
-      partition_by: ["sensor_id", "reading_date"]
-
-    - name: "bronze.iot_quarantine"
-      layer: "quarantine"
-      columns:
-        - name: "_batch_id"
-          type: "BIGINT"
-          nullable: false
-        - name: "_ingest_timestamp"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "_reason"
-          type: "STRING"
-          nullable: true
-        - name: "_raw_data"
-          type: "STRING"
-          nullable: true
-        - name: "reading_date"
-          type: "DATE"
-          nullable: false
-      partition_by: ["reading_date"]
-
-    - name: "bronze.iot_late_data"
-      layer: "late_data"
-      columns:
-        - name: "_late_data_received_timestamp"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "_watermark_at_arrival"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "_delay_minutes"
-          type: "INT"
-          nullable: false
-        - name: "_reason"
-          type: "STRING"
-          nullable: true
-        - name: "sensor_id"
-          type: "STRING"
-          nullable: true
-        - name: "location_id"
-          type: "STRING"
-          nullable: true
-        - name: "temperature"
-          type: "DOUBLE"
-          nullable: true
-        - name: "humidity"
-          type: "DOUBLE"
-          nullable: true
-        - name: "ph"
-          type: "DOUBLE"
-          nullable: true
-        - name: "soil_moisture"
-          type: "DOUBLE"
-          nullable: true
-        - name: "reading_timestamp"
-          type: "TIMESTAMP"
-          nullable: true
-        - name: "reading_date"
-          type: "DATE"
-          nullable: false
