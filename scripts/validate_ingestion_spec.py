@@ -83,15 +83,7 @@ class ControlPlane(BaseModel):
 
 
 class FinOpsGold(BaseModel):
-    trino_sync: str
     preaggregation_layer: str
-
-    @field_validator("trino_sync")
-    @classmethod
-    def d1(cls, v: str) -> str:
-        if "d_minus_1" not in v.lower() and "d-1" not in v.lower():
-            raise ValueError("Trino debe seguir la sincronización por lotes en segundo plano D-1.")
-        return v
 
     @field_validator("preaggregation_layer")
     @classmethod
