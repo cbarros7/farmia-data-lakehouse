@@ -102,6 +102,30 @@ Antes de realizar la purga física de esta ventana de tiempo en estos dominios m
 *   **Sincronización D-1 y consistencia eventual:** Al acordar que el *dashboard* analítico opere con datos consolidados hasta el día anterior (D-1), logramos que el clúster de Trino y el exportador de metadatos se enciendan únicamente durante la ventana nocturna, utilizando el patrón de sincronización asíncrona por lotes (*Background Batch Synchronization*) (Ford et al., 2022).
 *   **Patrón Proxy con Delta UniForm:** Spark escribe los datos en formato Delta Lake, pero UniForm expone los metadatos asíncronamente en formato Apache Iceberg, logrando acceso universal sin realizar operaciones adicionales de copiado (Zero-ETL).
 
+## 4. Guía de Ejecución Paso a Paso
+
+El flujo de ejecución del *Job* principal de ingesta se orquesta de manera secuencial para garantizar la robustez e integridad del Data Lakehouse. A continuación, se detalla cada fase:
+
+1. **Validación Temprana (Fail-Fast):** 
+   * **Script:** [`scripts/validate_ingestion_spec.py`](https://github.com/cbarros7/farmia-data-lakehouse/blob/main/scripts/validate_ingestion_spec.py)
+   * **Propósito:** Antes de aprovisionar infraestructura o iniciar el procesamiento masivo de datos, esta tarea inicial (*Task Validator*) se encarga de analizar los contratos de datos (archivos YAML). Utilizando la librería **Pydantic**, valida rigurosamente la consistencia lógica de todas las definiciones. Si detecta un error de estructura o una configuración faltante, el proceso se aborta de forma inmediata (en milisegundos), previniendo errores en cascada y sobrecostos.
+
+2. **Inicialización y Ejecución del Motor de Ingesta:**
+   * **Script:** [`src/ingestion_engine.py`](https://github.com/cbarros7/farmia-data-lakehouse/blob/main/src/ingestion_engine.py)
+   * **Propósito:** Esta fase constituye el núcleo del procesamiento. Al iniciarse, el motor realiza la **inicialización automática del Lakehouse** (*Lakehouse Initializer*). Esto significa que el código, basado en las especificaciones ya validadas, construye de forma dinámica el escenario necesario: aprovisiona las bases de datos, crea las tablas correspondientes con sus propiedades (Delta/Iceberg) y prepara todo el ecosistema. 
+   Una vez que el escenario está listo, arranca la ejecución pura del motor de ingesta, extrayendo los datos de la capa *Bronze* y promoviéndolos a la capa *Silver*, aplicando las políticas de control de calidad y cuarentena (DLQ) definidas.
+
+
+## 5. Documentación complementaria y scripts clave
+
+Para una comprensión más profunda de los componentes individuales, se sugiere revisar la siguiente documentación y código fuente del repositorio:
+
+*   **Modelos de validación (Pydantic):** [`src/validation/models.py`](https://github.com/cbarros7/farmia-data-lakehouse/blob/main/src/validation/models.py) - Define las reglas estrictas de los contratos de datos.
+*   **Contratos de Datos Base:** [`specs/control_plane/ingestion_contract.yaml`](https://github.com/cbarros7/farmia-data-lakehouse/blob/main/specs/control_plane/ingestion_contract.yaml) - Ejemplo del archivo de configuración YAML del plano de control.
+*   **Inicialización y Automatización DDL:** [`src/engine/lakehouse_initializer.py`](https://github.com/cbarros7/farmia-data-lakehouse/blob/main/src/engine/lakehouse_initializer.py) y su respectiva documentación en [`docs/CAMBIOS_AUTOMATIZACION_DDL.md`](https://github.com/cbarros7/farmia-data-lakehouse/blob/main/docs/CAMBIOS_AUTOMATIZACION_DDL.md).
+*   **Plan de Validación y Pruebas:** [`docs/PLAN_EJECUTABLE_VALIDACION_MOTOR_INGESTA.md`](https://github.com/cbarros7/farmia-data-lakehouse/blob/main/docs/PLAN_EJECUTABLE_VALIDACION_MOTOR_INGESTA.md) - Detalla los pasos para validar localmente el motor.
+*   **Seguridad y Secretos:** [`docs/configurar_key_vault_databricks.md`](https://github.com/cbarros7/farmia-data-lakehouse/blob/main/docs/configurar_key_vault_databricks.md) - Guía para la conexión con Azure Key Vault.
+
 
 ## Referencias
 
