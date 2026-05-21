@@ -22,15 +22,6 @@ source:
 schema_validation:
   schema_evolution_mode: "none"
   rescued_data_column: "_rescued_data"
-  business_rules:
-    - name: "positive_amount"
-      condition: "amount > 0"
-      action: "QUARANTINE"
-      reason: "invalid_amount"
-    - name: "valid_customer"
-      condition: "customer_id IS NOT NULL"
-      action: "QUARANTINE"
-      reason: "missing_customer"
   fields:
     - name: "transaction_id"
       type: "StringType"
@@ -124,7 +115,6 @@ sink:
     vacuum_days: 30
 
 dlq:
-  quarantine_table: "bronze.sales_quarantine"
   late_data:
     enabled: false
 
@@ -145,9 +135,8 @@ dlq:
 
   exception_masking:
     enabled: true
-    persistence_table: "system.alert_logs"
-    silence_duration_hours: 4
-    alert_threshold_count: 5
+    silence_expires_hours: 4
+    alert_logs_table: "system.alert_logs"
 
   watchdog:
     enabled: true
@@ -155,127 +144,3 @@ dlq:
     check_interval_seconds: 30
     alert_action: "warn_no_fail"
 
-tables_config:
-  tables:
-    - name: "bronze.sales_online"
-      layer: "bronze"
-      columns:
-        - name: "_file_path"
-          type: "STRING"
-          nullable: false
-        - name: "_ingest_timestamp"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "transaction_id"
-          type: "STRING"
-          nullable: false
-        - name: "customer_id"
-          type: "STRING"
-          nullable: false
-        - name: "product_id"
-          type: "STRING"
-          nullable: false
-        - name: "amount"
-          type: "DOUBLE"
-          nullable: false
-        - name: "quantity"
-          type: "INT"
-          nullable: false
-        - name: "currency"
-          type: "STRING"
-          nullable: false
-        - name: "transaction_timestamp"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "transaction_date"
-          type: "DATE"
-          nullable: false
-        - name: "_rescued_data"
-          type: "STRING"
-          nullable: true
-      partition_by: ["transaction_date"]
-
-    - name: "silver.sales_online"
-      layer: "silver"
-      columns:
-        - name: "_batch_id"
-          type: "BIGINT"
-          nullable: false
-        - name: "_ingest_timestamp"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "_event_timestamp"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "_schema_version_id"
-          type: "STRING"
-          nullable: false
-        - name: "_pipeline_git_hash"
-          type: "STRING"
-          nullable: false
-        - name: "_source_system"
-          type: "STRING"
-          nullable: false
-        - name: "_file_path"
-          type: "STRING"
-          nullable: false
-        - name: "_execution_user_id"
-          type: "STRING"
-          nullable: false
-        - name: "_environment_id"
-          type: "STRING"
-          nullable: false
-        - name: "_cluster_id"
-          type: "STRING"
-          nullable: false
-        - name: "_processing_library_version"
-          type: "STRING"
-          nullable: false
-        - name: "_operation_type"
-          type: "STRING"
-          nullable: false
-        - name: "_retention_ttl"
-          type: "STRING"
-          nullable: false
-        - name: "transaction_id"
-          type: "STRING"
-          nullable: false
-        - name: "customer_id"
-          type: "STRING"
-          nullable: false
-        - name: "product_id"
-          type: "STRING"
-          nullable: false
-        - name: "amount"
-          type: "DOUBLE"
-          nullable: false
-        - name: "quantity"
-          type: "INT"
-          nullable: false
-        - name: "currency"
-          type: "STRING"
-          nullable: false
-        - name: "transaction_timestamp"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "transaction_date"
-          type: "DATE"
-          nullable: false
-      partition_by: ["transaction_date"]
-
-    - name: "bronze.sales_quarantine"
-      layer: "quarantine"
-      columns:
-        - name: "_batch_id"
-          type: "BIGINT"
-          nullable: false
-        - name: "_ingest_timestamp"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "_reason"
-          type: "STRING"
-          nullable: true
-        - name: "_raw_data"
-          type: "STRING"
-          nullable: true
-      partition_by: ["_ingest_timestamp"]

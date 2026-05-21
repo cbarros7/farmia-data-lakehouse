@@ -1,39 +1,22 @@
 """
 Motor genérico de Spark: bifurcación Silver/Quarantine, Circuit Breaker, watermarking.
-
-Parametrizado vía YAML, validado con Pydantic.
-
-Patrones de Diseño Implementados:
-├── Parallel Split (Bifurcación Transaccional): foreachBatch para Silver vs Quarantine
-├── Circuit Breaker (Degradación Automática): Estados CLOSED/OPEN/HALF_OPEN
-├── Tenacity (Exponential Backoff): Reintentos resilentes para escritura a DLQ
-├── Watermarking (Late Data Detection): Límites explícitos de RAM y ventanas de tolerancia
-├── Exception Masking (Alert Fatigue Prevention): Silenciamiento dinámico de errores recurrentes
-├── Watchdog (Timeout Suave): Monitoreo no-bloqueante de ejecución
-├── Strategy Pattern (Sink Strategies): Soporta APPEND, MERGE_INTO, OVERWRITE dinámicamente
-└── Metadata Injection (13 campos obligatorios): Auditoría profunda por diseño
-
+Parametrizado vía YAML (IngestionContract).
 """
 
 import logging
 import hashlib
-import re
-import threading
-import time
 from datetime import datetime, timedelta
-from typing import Callable, Dict, Any, List, Optional, Tuple
-from functools import wraps
+from typing import Dict, Any, Optional, Tuple
 from enum import Enum
 from dataclasses import dataclass
 
-from pyspark.sql import DataFrame, SparkSession, Row
+from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import (
     col, lit, current_timestamp, to_timestamp, max as spark_max,
-    sum as spark_sum, count, when, expr, abs as spark_abs, coalesce, cast
+    when, expr, coalesce, cast
 )
 from pyspark.sql.types import DateType, StringType, IntegerType, DoubleType, TimestampType
 from pyspark import StorageLevel
-import tenacity
 from tenacity import (
     retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 )
@@ -45,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class CircuitBreakerState(str, Enum):
-    """Estados del Circuit Breaker (ADD §3.4)."""
+    """Estados del Circuit Breaker."""
     CLOSED = "closed"  # Normal: errores < umbral
     OPEN = "open"      # Degradación: errores >= umbral, silencios DLQ
     HALF_OPEN = "half_open"  # Recuperación: intent pequeno lote de prueba
@@ -68,20 +51,8 @@ class TimeoutError(Exception):
 
 
 class UnifiedMemoryCoreProcessor:
-    """
-    **Procesador Central Data Plane**
+    """Procesador Central Data Plane: foreachBatch como enrutador bifurcado Silver/DLQ."""
 
-    Implementa la lógica genérica de procesamiento Spark desacoplada de negocio.
-    Toda parametrización viene de IngestionContract (YAML validado por Pydantic).
-
-    Patrón Principal: foreachBatch que actúa como enrutador de calidad bifurcado.
-
-    Atributos:
-        spark (SparkSession): Sesión Spark activa
-        config (IngestionContract): Configuración validada
-        circuit_breaker (CircuitBreakerStatus): Estado dinámico del CB
-        alert_fingerprints (Dict): Tracking de errores para Exception Masking
-    """
 
     def __init__(self, spark: SparkSession, config: IngestionContract):
         if not isinstance(config, IngestionContract):
@@ -117,15 +88,10 @@ class UnifiedMemoryCoreProcessor:
         self.batch_counter += 1
         start_time = datetime.now()
 
-        logger.info(
-            f"[Lote {batch_id}] Iniciando procesamiento "
-            f"({batch_df.count()} registros)"
-        )
-
         try:
             batch_df = batch_df.persist(StorageLevel.MEMORY_AND_DISK)
-            total_records = batch_df.count()
-            logger.debug(f"[Lote {batch_id}] Persistido: {total_records} registros")
+            total_records = batch_df.count()  # Único action post-persist
+            logger.info(f"[Lote {batch_id}] Iniciando: {total_records} registros")
 
             # Escribir raw a Bronze (antes de inyectar metadata)
             self._write_to_bronze(batch_df, batch_id)
@@ -142,7 +108,7 @@ class UnifiedMemoryCoreProcessor:
             valid_df, corrupt_df = self._bifurcate_data(batch_df)
             self._write_to_silver(valid_df, batch_id, cb_state)
 
-            if corrupt_df.count() > 0:
+            if not corrupt_df.isEmpty():
                 self._write_to_quarantine(corrupt_df, batch_id, cb_state)
 
             batch_df.unpersist()
@@ -165,7 +131,6 @@ class UnifiedMemoryCoreProcessor:
     def _inject_metadata(self, df: DataFrame, batch_id: int) -> DataFrame:
         enriched_df = df
         for meta in self.config.transformations.metadata_injection:
-            # validated_expr = self._validate_metadata_expr(meta.expression)
             validated_expr = self._eval_metadata_expr(meta.expression, batch_id)
             enriched_df = enriched_df.withColumn(meta.name, validated_expr)
         
@@ -178,11 +143,6 @@ class UnifiedMemoryCoreProcessor:
         
         return enriched_df
 
-    # def _validate_metadata_expr(self, expr_str: str):
-    #     allowed_funcs = {"lit", "current_timestamp", "col", "current_date", "unix_timestamp"}
-    #     if not any(f"({f}(" in expr_str or expr_str.startswith(f) for f in allowed_funcs):
-    #         raise ValueError(f"Expresión no permitida: {expr_str}")
-    #     return expr(expr_str)
     
     def _eval_metadata_expr(self, expr_str: str, batch_id: int):
         """Evaluar expresión PySpark dinámicamente desde YAML."""
@@ -249,20 +209,6 @@ class UnifiedMemoryCoreProcessor:
             logger.error(f"[Batch {batch_id}] Late data error: {e}", exc_info=True)
             return df
 
-    def _restore_watermark_state(self, batch_id: int) -> Dict[str, Any]:
-        """Restaurar estado de watermark desde checkpoint ADLS."""
-        try:
-            wm_config = self.config.transformations.watermarking
-            if not wm_config or not wm_config.state_location:
-                return {}
-            state_path = f"{wm_config.state_location}/batch_{batch_id}.parquet"
-            if self.spark.read.option("mergeSchema", "false").parquet(state_path):
-                data = self.spark.read.parquet(state_path).collect()
-                return {row[0]: row[1] for row in data} if data else {}
-        except Exception as e:
-            logger.debug(f"[Batch {batch_id}] No prior watermark state: {e}")
-        return {}
-
     def _persist_watermark_state(self, batch_id: int, state: Dict[str, Any]) -> None:
         """Persistir estado de watermark a checkpoint ADLS."""
         try:
@@ -282,23 +228,19 @@ class UnifiedMemoryCoreProcessor:
         rescued_col = self.config.schema_validation.rescued_data_column
         valid_df = df.filter(col(rescued_col).isNull())
         corrupt_df = df.filter(col(rescued_col).isNotNull())
-
-        logger.info(
-            f"Bifurcación: {valid_df.count()} válidos, {corrupt_df.count()} corruptos"
-        )
         return valid_df, corrupt_df
 
     def _write_to_bronze(self, df: DataFrame, batch_id: int) -> None:
         """Escribir raw a Bronze: datos crudos con _rescued_data intacto."""
-        if df.count() == 0:
+        if df.isEmpty():
             logger.debug("Sin datos para Bronze")
             return
 
         domain = self.config.pipeline_info.domain
         bronze_path = f"abfss://bronze@stfarmia.dfs.core.windows.net/{domain}/"
         bronze_table = f"bronze.{domain}"
-        
-        logger.info(f"Escribiendo {df.count()} a tabla EXTERNA (ADLS): {bronze_table} -> {bronze_path}")
+
+        logger.info(f"Escribiendo a tabla EXTERNA (ADLS): {bronze_table} -> {bronze_path}")
         
         try:
             df.dropDuplicates().write \
@@ -310,7 +252,7 @@ class UnifiedMemoryCoreProcessor:
             # Crear tabla EXTERNA (unmanaged) - datos en ADLS, metadata en Databricks
             self.spark.sql(f"CREATE SCHEMA IF NOT EXISTS bronze")
             self.spark.sql(f"CREATE TABLE IF NOT EXISTS {bronze_table} USING DELTA LOCATION '{bronze_path}'")
-            logger.info(f"✓ Tabla EXTERNA {bronze_table} registrada en Databricks | Datos en {bronze_path}")
+            logger.info(f"Tabla EXTERNA {bronze_table} registrada en Databricks | Datos en {bronze_path}")
         except Exception as e:
             logger.error(f"Error escribiendo {bronze_path}: {e}", exc_info=True)
 
@@ -358,7 +300,7 @@ class UnifiedMemoryCoreProcessor:
         self, df: DataFrame, batch_id: int, cb_state: CircuitBreakerState
     ) -> None:
         """Escribir válidos a Silver: MERGE_INTO o APPEND según config."""
-        if df.count() == 0:
+        if df.isEmpty():
             logger.debug("Sin datos válidos para Silver")
             return
 
@@ -368,7 +310,7 @@ class UnifiedMemoryCoreProcessor:
         table_name = self.config.sink.table_name
         mode = self.config.sink.mode
 
-        logger.info(f"Escribiendo {df.count()} a {table_name} (modo: {mode.value})")
+        logger.info(f"Escribiendo a {table_name} (modo: {mode.value})")
 
         try:
             if mode.value == "merge_into":
@@ -420,7 +362,7 @@ class UnifiedMemoryCoreProcessor:
         """
 
         self.spark.sql(merge_sql)
-        logger.info(f"✓ MERGE_INTO exitoso en tabla EXTERNA: {silver_table}")
+        logger.info(f"MERGE_INTO exitoso en tabla EXTERNA: {silver_table}")
 
     def _write_append(self, df: DataFrame, table_name: str) -> None:
         """APPEND: append-only para IoT/Weather en tabla EXTERNA (ADLS)."""
@@ -436,7 +378,7 @@ class UnifiedMemoryCoreProcessor:
         
         df.dropDuplicates().write.format("delta").mode("append").option("mergeSchema", "false").save(silver_path)
         
-        logger.info(f"✓ APPEND exitoso en tabla EXTERNA: {silver_table}")
+        logger.info(f"APPEND exitoso en tabla EXTERNA: {silver_table}")
         
         if self.config.sink.lifecycle and self.config.sink.lifecycle.optimization:
             opt = self.config.sink.lifecycle.optimization
@@ -453,18 +395,13 @@ class UnifiedMemoryCoreProcessor:
         self, df: DataFrame, batch_id: int, cb_state: CircuitBreakerState
     ) -> None:
         """Escribir corruptos a tabla EXTERNA (ADLS) con reintentos según Circuit Breaker."""
-        if df.count() == 0:
+        if df.isEmpty():
             logger.debug("Sin datos corruptos para cuarentena")
             return
 
         domain = self.config.pipeline_info.domain
         quarantine_table = f"quarantine.{domain}"
         quarantine_path = f"abfss://bronze@stfarmia.dfs.core.windows.net/{domain}_quarantine/"
-        
-        logger.info(
-            f"Escribiendo {df.count()} corruptos a tabla EXTERNA (ADLS): {quarantine_table} -> {quarantine_path} "
-            f"(CB: {cb_state})"
-        )
 
         if cb_state == CircuitBreakerState.CLOSED:
             max_retries = self.config.dlq.retry_policy.max_retries
@@ -476,7 +413,7 @@ class UnifiedMemoryCoreProcessor:
         # Crear tabla EXTERNA (unmanaged) - datos en ADLS, metadata en Databricks
         self.spark.sql(f"CREATE SCHEMA IF NOT EXISTS quarantine")
         self.spark.sql(f"CREATE TABLE IF NOT EXISTS {quarantine_table} USING DELTA LOCATION '{quarantine_path}'")
-        
+
         @retry(
             stop=stop_after_attempt(max_retries + 1),
             wait=wait_exponential(
@@ -495,7 +432,7 @@ class UnifiedMemoryCoreProcessor:
 
         try:
             write_quarantine_with_tenacity()
-            logger.info(f"DLQ: {df.count()} registros en cuarentena")
+            logger.info(f"DLQ: {quarantine_table} escritura exitosa")
         except Exception as e:
             logger.error(f"Error crítico escribiendo DLQ: {e}", exc_info=True)
             self._handle_exception_masking(e, batch_id)

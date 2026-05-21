@@ -17,10 +17,8 @@ class DomainType(str, Enum):
 
 
 class SourceType(str, Enum):
-    """Tipos de fuente soportados por el motor de ingesta."""
+    """Tipo de fuente soportado por el motor: exclusivamente Auto Loader."""
     AUTO_LOADER = "auto_loader"
-    STREAMING = "streaming"
-    BATCH = "batch"
 
 
 class SourceFormat(str, Enum):
@@ -35,7 +33,6 @@ class SinkMode(str, Enum):
     """Estrategias de escritura: idempotencia determinística según dominio."""
     APPEND = "append"
     MERGE_INTO = "merge_into"
-    OVERWRITE = "overwrite"
 
 
 class PipelineInfo(BaseModel):
@@ -73,14 +70,6 @@ class FieldDefinition(BaseModel):
     nullable: bool = Field(True, description="¿Campo nullable?")
 
 
-class BusinessRule(BaseModel):
-    """Regla de negocio dinámica: condición + acción (YAML-driven, no hardcodeada)."""
-    name: str = Field(..., description="Identificador único de regla")
-    condition: str = Field(..., description="Expresión Spark SQL (ej. 'temperature < -50 OR temperature > 60')")
-    action: Literal["QUARANTINE", "WARN", "ENRICH"] = Field(..., description="Acción si condición es verdadera")
-    reason: Optional[str] = Field(None, description="Motivo de la acción (para auditoría)")
-
-
 class SchemaValidation(BaseModel):
     """Validación estricta de esquema: rechaza evolución no autorizada."""
     schema_evolution_mode: Literal["none", "additive", "all"] = Field(
@@ -94,10 +83,6 @@ class SchemaValidation(BaseModel):
     fields: Optional[List[FieldDefinition]] = Field(
         None,
         description="Definición explícita de campos esperados (si None, inferencia deshabilitada)"
-    )
-    business_rules: Optional[List[BusinessRule]] = Field(
-        None,
-        description="Reglas de negocio dinámicas a aplicar post-parsing (YAML-driven)"
     )
 
 
@@ -301,7 +286,7 @@ class TransformationsConfig(BaseModel):
     """Transformaciones: inyección de metadatos, reglas dinámicas, pre-agregación."""
     pattern: str = Field(
         "metadata_injection",
-        description="Patrón de transformación (metadata_injection, pre_aggregation, acl_layer)"
+        description="Patrón de transformación (metadata_injection, pre_aggregation)"
     )
     spark_memory_config: Optional[Dict[str, str]] = Field(
         None,
@@ -318,10 +303,6 @@ class TransformationsConfig(BaseModel):
     pre_aggregation: Optional[Dict[str, Any]] = Field(
         None,
         description="Configuración pre-agregación (antes de purga): rollup rules, retention (ej. IoT 14 días)"
-    )
-    acl_layer: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Anti-Corruption Layer: parametrización de APIs externas (zero-copy masking)"
     )
 
     @field_validator("metadata_injection")
@@ -363,11 +344,6 @@ class SinkConfig(BaseModel):
     )
 
     @model_validator(mode='after')
-    def validate_domain_sink_mode(self) -> 'SinkConfig':
-        """Validar Idempotencia Dinámica: emparejar dominio con estrategia."""
-        return self
-
-    @model_validator(mode='after')
     def validate_merge_key_for_merge_into(self) -> 'SinkConfig':
         """Si mode=merge_into, merge_keys es obligatorio."""
         if self.mode == SinkMode.MERGE_INTO and not self.merge_keys:
@@ -375,31 +351,6 @@ class SinkConfig(BaseModel):
                 "merge_keys es obligatorio cuando mode='merge_into'"
             )
         return self
-
-
-class TableSchema(BaseModel):
-    """Definición de esquema para tabla: nombre, capa (bronze/silver/gold), columnas."""
-    name: str = Field(..., description="Nombre tabla (ej. bronze.weather_external)")
-    layer: Literal["bronze", "silver", "gold", "quarantine", "late_data"] = Field(
-        ...,
-        description="Capa de datos"
-    )
-    columns: List[FieldDefinition] = Field(
-        ...,
-        description="Definición de columnas (ej. [{name: _batch_id, type: BIGINT, nullable: false}])"
-    )
-    partition_by: Optional[List[str]] = Field(
-        None,
-        description="Columnas de particionamiento"
-    )
-
-
-class TablesConfig(BaseModel):
-    """Configuración de todas las tablas a crear (Bronze, Silver, Quarantine, Late Data, Gold)."""
-    tables: List[TableSchema] = Field(
-        ...,
-        description="Lista de todas las tablas del pipeline con sus esquemas"
-    )
 
 
 class IngestionContract(BaseModel):
@@ -414,7 +365,6 @@ class IngestionContract(BaseModel):
     dlq: DLQConfig = Field(..., description="Dead Letter Queue: resilencia, observabilidad")
     transformations: TransformationsConfig = Field(..., description="Transformaciones, metadatos")
     sink: SinkConfig = Field(..., description="Estrategia idempotente de escritura")
-    tables_config: TablesConfig = Field(..., description="Definición de todas las tablas con esquemas")
     checkpoint_location: str = Field(..., description="Ruta ADLS Gen2 para checkpoints de streaming")
 
     @model_validator(mode='after')

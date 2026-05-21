@@ -112,7 +112,6 @@ sink:
     vacuum_days: 30
 
 dlq:
-  quarantine_table: "bronze.inventory_quarantine"
   late_data:
     enabled: false
 
@@ -133,9 +132,8 @@ dlq:
 
   exception_masking:
     enabled: true
-    persistence_table: "system.alert_logs"
-    silence_duration_hours: 4
-    alert_threshold_count: 3
+    silence_expires_hours: 4
+    alert_logs_table: "system.alert_logs"
 
   watchdog:
     enabled: true
@@ -143,121 +141,3 @@ dlq:
     check_interval_seconds: 30
     alert_action: "warn_no_fail"
 
-tables_config:
-  tables:
-    - name: "bronze.inventory_erp"
-      layer: "bronze"
-      columns:
-        - name: "_file_path"
-          type: "STRING"
-          nullable: false
-        - name: "_ingest_timestamp"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "product_id"
-          type: "STRING"
-          nullable: false
-        - name: "warehouse_id"
-          type: "STRING"
-          nullable: false
-        - name: "quantity_available"
-          type: "INT"
-          nullable: false
-        - name: "quantity_reserved"
-          type: "INT"
-          nullable: true
-        - name: "last_updated"
-          type: "DATE"
-          nullable: false
-        - name: "last_updated_timestamp"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "operation_id"
-          type: "STRING"
-          nullable: false
-        - name: "_rescued_data"
-          type: "STRING"
-          nullable: true
-      partition_by: ["last_updated"]
-
-    - name: "silver.inventory_erp"
-      layer: "silver"
-      columns:
-        - name: "_batch_id"
-          type: "BIGINT"
-          nullable: false
-        - name: "_ingest_timestamp"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "_event_timestamp"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "_schema_version_id"
-          type: "STRING"
-          nullable: false
-        - name: "_pipeline_git_hash"
-          type: "STRING"
-          nullable: false
-        - name: "_source_system"
-          type: "STRING"
-          nullable: false
-        - name: "_file_path"
-          type: "STRING"
-          nullable: false
-        - name: "_execution_user_id"
-          type: "STRING"
-          nullable: false
-        - name: "_environment_id"
-          type: "STRING"
-          nullable: false
-        - name: "_cluster_id"
-          type: "STRING"
-          nullable: false
-        - name: "_processing_library_version"
-          type: "STRING"
-          nullable: false
-        - name: "_operation_type"
-          type: "STRING"
-          nullable: false
-        - name: "_retention_ttl"
-          type: "STRING"
-          nullable: false
-        - name: "product_id"
-          type: "STRING"
-          nullable: false
-        - name: "warehouse_id"
-          type: "STRING"
-          nullable: false
-        - name: "quantity_available"
-          type: "INT"
-          nullable: false
-        - name: "quantity_reserved"
-          type: "INT"
-          nullable: true
-        - name: "last_updated"
-          type: "DATE"
-          nullable: false
-        - name: "last_updated_timestamp"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "operation_id"
-          type: "STRING"
-          nullable: false
-      partition_by: ["warehouse_id"]
-
-    - name: "bronze.inventory_quarantine"
-      layer: "quarantine"
-      columns:
-        - name: "_batch_id"
-          type: "BIGINT"
-          nullable: false
-        - name: "_ingest_timestamp"
-          type: "TIMESTAMP"
-          nullable: false
-        - name: "_reason"
-          type: "STRING"
-          nullable: true
-        - name: "_raw_data"
-          type: "STRING"
-          nullable: true
-      partition_by: ["_ingest_timestamp"]
