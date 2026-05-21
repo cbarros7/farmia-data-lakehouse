@@ -1,7 +1,7 @@
 """
 Orquestador de Ciclo de Vida y TTL: Gestión Inteligente de Retención de Datos
 
-Implementa políticas de retención asimétricas según dominio (ADD §3.5):
+Implementa políticas de retención asimétricas según dominio:
 - IoT + Clima: TTL 14 días + Pre-aggregation obligatoria antes de VACUUM
 - Sales + Inventory: Histórico ilimitado (datos transaccionales críticos)
 
@@ -13,7 +13,7 @@ Patrones Implementados:
 ├── Auditabilidad: Registra todas las operaciones en system.lifecycle_audit
 └── Resiliencia: Exception masking + idempotencia de operaciones VACUUM
 
-SSoT: ADD §3.5 (Ciclo de vida del dato, TTL 14 días para IoT/Clima)
+SSoT: Ciclo de vida del dato, TTL 14 días para IoT/Clima
 """
 
 import logging
@@ -67,50 +67,61 @@ class LifecycleManager:
         self.control_plane_path = control_plane_path
         self.domains_config: Dict[str, LifecycleMeta] = {}
         self._load_domain_policies()
-        logger.info("✓ Lifecycle Manager inicializado")
+        logger.info("Lifecycle Manager inicializado")
 
     def _load_domain_policies(self) -> None:
-        """
-        Lee el contrato desde: self.control_plane_path + "ingestion_contract.yaml"
-        """
-        # [Se requerirá parsear el .yaml vía dbutils o ADLS API usando PyYAML]
-        # Implementación mínima transitoria si yaml no está inyectado:
-        # TODO: Cargar y parsear Yaml real.
-        
-        logger.info(f"Cargando contrato desde: {self.control_plane_path}ingestion_contract.yaml")
-        
-        # Mapeo hardcodeado temporal hasta integrar el parser YAML
-        ttl_policy = {
-            "sales_online": {"ttl_days": None, "requires_preagg": False},
-            "inventory_erp": {"ttl_days": None, "requires_preagg": False},
-            "iot_sensors": {"ttl_days": 14, "requires_preagg": True},
-            "weather_external": {"ttl_days": 14, "requires_preagg": True},
-        }
+        """Carga TTL y mapping de Gold desde cada *_domain.yaml en el control plane."""
+        import os
+        import yaml as _yaml
 
-        table_mapping = {
+        logger.info(f"Cargando contratos desde: {self.control_plane_path}")
+
+        # Mapeo Gold determinado por dominio
+        gold_table_map = {
             "sales_online": "gold.sales_fact_d1",
             "inventory_erp": "gold.inventory_fact_d1",
             "iot_sensors": "gold.iot_daily_obt",
             "weather_external": "gold.weather_daily_obt",
         }
 
-        for domain, policy in ttl_policy.items():
+        yaml_files = [
+            f for f in os.listdir(self.control_plane_path)
+            if f.endswith("_domain.yaml")
+        ]
+
+        for yaml_file in sorted(yaml_files):
+            path = os.path.join(self.control_plane_path, yaml_file)
+            with open(path) as fh:
+                contract = _yaml.safe_load(fh)
+
+            domain = contract.get("pipeline_info", {}).get("domain", "")
+            if not domain:
+                logger.warning(f"{yaml_file}: sin 'pipeline_info.domain'")
+                continue
+
+            lifecycle = contract.get("sink", {}).get("lifecycle", {}) or {}
+            ttl_raw = lifecycle.get("ttl")
+            ttl_days = int(ttl_raw) if ttl_raw else None
+            requires_preagg = bool(
+                lifecycle.get("pre_aggregation", {}) and
+                lifecycle["pre_aggregation"].get("enabled", False)
+            )
+
             self.domains_config[domain] = LifecycleMeta(
                 domain=domain,
                 silver_table=f"silver.{domain}",
-                gold_table=table_mapping[domain],
-                ttl_days=policy["ttl_days"],
-                requires_preagg=policy["requires_preagg"]
+                gold_table=gold_table_map.get(domain, f"gold.{domain}_d1"),
+                ttl_days=ttl_days,
+                requires_preagg=requires_preagg,
             )
             logger.info(
                 f"Política configurada: {domain} -> "
-                f"TTL={policy['ttl_days']} días, "
-                f"PreAgg={'Sí' if policy['requires_preagg'] else 'No'}"
+                f"TTL={ttl_days} días, PreAgg={'Si' if requires_preagg else 'No'}"
             )
 
     def validate_preaggregation_complete(self, domain: str) -> bool:
         """
-        Validar que la pre-aggregation se completó exitosamente (ADD §3.5).
+        Validar que la pre-aggregation se completó exitosamente.
         
         Estrategia:
         1. Leer fecha de último agregamiento en system.lifecycle_audit
@@ -137,7 +148,7 @@ class LifecycleManager:
             if not audit_df or audit_df[0]["last_agg_time"] is None:
                 logger.warning(
                     f"Pre-aggregation para {domain} nunca se ejecutó. "
-                    f"BLOQUEANDO VACUUM hasta completar agregación."
+                    f"BLOQUEANDO VACUUM hasta completar agregacion."
                 )
                 return False
 
@@ -168,7 +179,7 @@ class LifecycleManager:
         dry_run: bool = False
     ) -> Tuple[bool, Dict[str, Any]]:
         """
-        Ejecutar VACUUM con políticas FinOps (ADD §3.5).
+        Ejecutar VACUUM con políticas FinOps.
         
         Flujo:
         1. Si TTL y requires_preagg: Validar que pre-aggregation está completo
@@ -210,7 +221,7 @@ class LifecycleManager:
         try:
             logger.info(
                 f"Ejecutando VACUUM: {silver_table} "
-                f"(retención: {ttl} días = {retention_hours}h)"
+                f"(retencion: {ttl} días = {retention_hours}h)"
             )
 
             if dry_run:
@@ -225,7 +236,7 @@ class LifecycleManager:
                 self.spark.sql(
                     f"VACUUM {silver_table} RETAIN {retention_hours} HOURS"
                 )
-                logger.info(f"✓ VACUUM completado: {silver_table}")
+                logger.info(f"VACUUM completado: {silver_table}")
                 self._audit_operation(
                     domain, "vacuum", "SUCCESS",
                     {"retention_hours": retention_hours, "table": silver_table}
@@ -233,7 +244,7 @@ class LifecycleManager:
                 return True, {"vacuumed": True, "table": silver_table}
 
         except Exception as e:
-            logger.error(f"✗ Error ejecutando VACUUM: {e}", exc_info=True)
+            logger.error(f"Error ejecutando VACUUM: {e}", exc_info=True)
             self._audit_operation(
                 domain, "vacuum", "FAILED", {"error": str(e)}
             )
@@ -272,11 +283,11 @@ class LifecycleManager:
                 "system.lifecycle_audit"
             )
             logger.info(
-                f"Auditoría registrada: {domain} / {operation} / {status}"
+                f"Auditoria registrada: {domain} / {operation} / {status}"
             )
 
         except Exception as e:
-            logger.error(f"Error registrando auditoría: {e}")
+            logger.error(f"Error registrando auditoria: {e}")
 
     def analyze_storage_impact(self) -> DataFrame:
         """
@@ -295,7 +306,7 @@ class LifecycleManager:
 
         except Exception as e:
             logger.error(f"Error analizando Storage: {e}")
-            return None
+            return self.spark.createDataFrame([], schema="domain STRING, size_bytes BIGINT")
 
     def run_batch_lifecycle_maintenance(
         self,
@@ -330,7 +341,7 @@ class LifecycleManager:
 
         logger.info("Reporte de mantenimiento:")
         for domain, (success, stats) in results.items():
-            status = "✓" if success else "✗"
+            status = "OK" if success else "FAIL"
             logger.info(f"  {status} {domain}: {stats}")
 
         return results
@@ -342,7 +353,7 @@ def main(
     dry_run: bool = False
 ) -> None:
     """
-    Punto de entrada para job de ciclo de vida (Databricks Jobs / Airflow).
+    Punto de entrada para job de ciclo de vida - Databricks Jobs.
     
     Ejecución típica (nightly):
         spark-submit \\
@@ -356,10 +367,7 @@ def main(
         control_plane_path: Ruta al control plane
         dry_run: True para simular sin ejecutar
     """
-    logger.info("="*70)
-    logger.info("LIFECYCLE MANAGER: Inicio")
-    logger.info("="*70)
-
+    logger.info("[START] Mantenimiento de ciclo de vida (TTL & VACUUM)")
     try:
         manager = LifecycleManager(spark, control_plane_path)
 
@@ -379,9 +387,7 @@ def main(
         logger.info(
             f"Mantenimiento completado: {success_count}/{total_count} dominios exitosos"
         )
-        logger.info("="*70)
-        logger.info("LIFECYCLE MANAGER: Fin")
-        logger.info("="*70)
+        logger.info("[SUCCESS] Mantenimiento completado")
 
     except Exception as e:
         logger.error(f"Error crítico en lifecycle manager: {e}", exc_info=True)
