@@ -127,6 +127,9 @@ class UnifiedMemoryCoreProcessor:
             total_records = batch_df.count()
             logger.debug(f"[Lote {batch_id}] Persistido: {total_records} registros")
 
+            # Escribir raw a Bronze (antes de inyectar metadata)
+            self._write_to_bronze(batch_df, batch_id)
+
             batch_df = self._inject_metadata(batch_df, batch_id)
             batch_df = self._handle_late_data(batch_df, batch_id)
             self._update_circuit_breaker(batch_df)
@@ -285,6 +288,32 @@ class UnifiedMemoryCoreProcessor:
         )
         return valid_df, corrupt_df
 
+    def _write_to_bronze(self, df: DataFrame, batch_id: int) -> None:
+        """Escribir raw a Bronze: datos crudos con _rescued_data intacto."""
+        if df.count() == 0:
+            logger.debug("Sin datos para Bronze")
+            return
+
+        domain = self.config.pipeline_info.domain
+        bronze_path = f"abfss://bronze@stfarmia.dfs.core.windows.net/{domain}/"
+        bronze_table = f"bronze.{domain}"
+        
+        logger.info(f"Escribiendo {df.count()} a tabla EXTERNA (ADLS): {bronze_table} -> {bronze_path}")
+        
+        try:
+            df.dropDuplicates().write \
+                .format("delta") \
+                .mode("append") \
+                .option("mergeSchema", "true") \
+                .save(bronze_path)
+            
+            # Crear tabla EXTERNA (unmanaged) - datos en ADLS, metadata en Databricks
+            self.spark.sql(f"CREATE SCHEMA IF NOT EXISTS bronze")
+            self.spark.sql(f"CREATE TABLE IF NOT EXISTS {bronze_table} USING DELTA LOCATION '{bronze_path}'")
+            logger.info(f"✓ Tabla EXTERNA {bronze_table} registrada en Databricks | Datos en {bronze_path}")
+        except Exception as e:
+            logger.error(f"Error escribiendo {bronze_path}: {e}", exc_info=True)
+
     def _update_circuit_breaker(self, df: DataFrame) -> None:
         """Actualizar estado: CLOSED/OPEN/HALF_OPEN según % errores."""
         rescued_col = self.config.schema_validation.rescued_data_column
@@ -359,22 +388,31 @@ class UnifiedMemoryCoreProcessor:
                 logger.warning(f"CB en {cb_state}: tolerando error de Silver")
 
     def _write_merge_into(self, df: DataFrame, table_name: str) -> None:
-        """MERGE_INTO: upsert idempotente para ventas/inventario."""
+        """MERGE_INTO: upsert idempotente para ventas/inventario en tabla EXTERNA (ADLS)."""
         merge_keys = self.config.sink.merge_keys
         if not merge_keys:
             raise ValueError(f"merge_key obligatorio: {table_name}")
 
+        domain = self.config.pipeline_info.domain
+        silver_path = f"abfss://silver@stfarmia.dfs.core.windows.net/{domain}/"
+        silver_table = f"silver.{domain}"
+        
+        logger.info(f"MERGE_INTO: {silver_table} (TABLA EXTERNA) -> {silver_path}")
+        
+        # Crear tabla EXTERNA (unmanaged) - datos en ADLS, metadata en Databricks
+        self.spark.sql(f"CREATE SCHEMA IF NOT EXISTS silver")
+        self.spark.sql(f"CREATE TABLE IF NOT EXISTS {silver_table} USING DELTA LOCATION '{silver_path}'")
+        
         on_clause = " AND ".join([f"t.{key} = s.{key}" for key in merge_keys])
         update_cols = [c for c in df.columns if c not in merge_keys]
         update_clause = ", ".join([f"t.{c} = s.{c}" for c in update_cols])
         insert_cols = ", ".join(df.columns)
         insert_values = ", ".join([f"s.{c}" for c in df.columns])
 
-        # Registrar como vista global para persistir en la sesión Spark
-        df.createOrReplaceGlobalTempView("source_temp_merge")
+        df.dropDuplicates().createOrReplaceGlobalTempView("source_temp_merge")
         
         merge_sql = f"""
-            MERGE INTO {table_name} t
+            MERGE INTO {silver_table} t
             USING global_temp.source_temp_merge s
             ON {on_clause}
             WHEN MATCHED THEN UPDATE SET {update_clause}
@@ -382,34 +420,49 @@ class UnifiedMemoryCoreProcessor:
         """
 
         self.spark.sql(merge_sql)
-        logger.debug(f"MERGE_INTO exitoso: {table_name}")
+        logger.info(f"✓ MERGE_INTO exitoso en tabla EXTERNA: {silver_table}")
 
     def _write_append(self, df: DataFrame, table_name: str) -> None:
-        """APPEND: append-only para IoT/Weather."""
-        df.write.format("delta").mode("append").option("mergeSchema", "false").saveAsTable(table_name)
+        """APPEND: append-only para IoT/Weather en tabla EXTERNA (ADLS)."""
+        domain = self.config.pipeline_info.domain
+        silver_path = f"abfss://silver@stfarmia.dfs.core.windows.net/{domain}/"
+        silver_table = f"silver.{domain}"
+        
+        logger.info(f"APPEND: {silver_table} (TABLA EXTERNA) -> {silver_path}")
+        
+        # Crear tabla EXTERNA (unmanaged) - datos en ADLS, metadata en Databricks
+        self.spark.sql(f"CREATE SCHEMA IF NOT EXISTS silver")
+        self.spark.sql(f"CREATE TABLE IF NOT EXISTS {silver_table} USING DELTA LOCATION '{silver_path}'")
+        
+        df.dropDuplicates().write.format("delta").mode("append").option("mergeSchema", "false").save(silver_path)
+        
+        logger.info(f"✓ APPEND exitoso en tabla EXTERNA: {silver_table}")
         
         if self.config.sink.lifecycle and self.config.sink.lifecycle.optimization:
             opt = self.config.sink.lifecycle.optimization
             if opt.z_order_by:
                 z_cols = ", ".join(opt.z_order_by)
-                self.spark.sql(f"ALTER TABLE {table_name} SET TBLPROPERTIES ('delta.dataSkippingNumIndexedCols' = '32')")
+                self.spark.sql(f"ALTER TABLE {silver_table} SET TBLPROPERTIES ('delta.dataSkippingNumIndexedCols' = '32')")
                 logger.debug(f"Z-order: {z_cols}")
             if opt.vacuum_days:
-                self.spark.sql(f"VACUUM {table_name} RETAIN {opt.vacuum_days} DAYS")
+                self.spark.sql(f"VACUUM {silver_table} RETAIN {opt.vacuum_days} DAYS")
                 logger.debug(f"VACUUM: {opt.vacuum_days} días")
 
 
     def _write_to_quarantine(
         self, df: DataFrame, batch_id: int, cb_state: CircuitBreakerState
     ) -> None:
-        """Escribir corruptos a DLQ con reintentos según Circuit Breaker."""
+        """Escribir corruptos a tabla EXTERNA (ADLS) con reintentos según Circuit Breaker."""
         if df.count() == 0:
             logger.debug("Sin datos corruptos para cuarentena")
             return
 
-        quarantine_table = f"bronze.{self.config.pipeline_info.domain}_quarantine"
+        domain = self.config.pipeline_info.domain
+        quarantine_table = f"quarantine.{domain}"
+        quarantine_path = f"abfss://bronze@stfarmia.dfs.core.windows.net/{domain}_quarantine/"
+        
         logger.info(
-            f"Escribiendo {df.count()} corruptos a {quarantine_table} "
+            f"Escribiendo {df.count()} corruptos a tabla EXTERNA (ADLS): {quarantine_table} -> {quarantine_path} "
             f"(CB: {cb_state})"
         )
 
@@ -420,6 +473,10 @@ class UnifiedMemoryCoreProcessor:
         else:
             max_retries = 1
 
+        # Crear tabla EXTERNA (unmanaged) - datos en ADLS, metadata en Databricks
+        self.spark.sql(f"CREATE SCHEMA IF NOT EXISTS quarantine")
+        self.spark.sql(f"CREATE TABLE IF NOT EXISTS {quarantine_table} USING DELTA LOCATION '{quarantine_path}'")
+        
         @retry(
             stop=stop_after_attempt(max_retries + 1),
             wait=wait_exponential(
@@ -431,10 +488,10 @@ class UnifiedMemoryCoreProcessor:
             reraise=True
         )
         def write_quarantine_with_tenacity():
-            df.write.format("delta") \
+            df.dropDuplicates().write.format("delta") \
                 .mode("append") \
                 .option("mergeSchema", "false") \
-                .saveAsTable(quarantine_table)
+                .save(quarantine_path)
 
         try:
             write_quarantine_with_tenacity()

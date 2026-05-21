@@ -127,7 +127,7 @@ def main(contract_path: str):
     
     df_stream = build_auto_loader_stream(spark, config)
     
-    logger.info(f"\n[INICIANDO STREAMING] {config.pipeline_info.domain}")
+    logger.info(f"\n[INICIANDO PROCESAMIENTO] {config.pipeline_info.domain}")
     logger.info(f"Checkpoint: {config.checkpoint_location}")
     logger.info(f"Sink: {config.sink.table_name} ({config.sink.mode.value})")
     logger.info("=" * 70)
@@ -136,11 +136,12 @@ def main(contract_path: str):
         .writeStream \
         .foreachBatch(processor.process_batch) \
         .option("checkpointLocation", config.checkpoint_location) \
+        .trigger(once=True) \
         .start()
     
     query.awaitTermination()
-    
-    logger.info("Streaming finalizado")
+    logger.info("Procesamiento completado - Auto Loader se detuvo")
+    logger.info("=" * 70)
 
 
 if __name__ == "__main__":
