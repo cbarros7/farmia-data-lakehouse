@@ -124,3 +124,6 @@ A continuación se adjuntan capturas complementarias de la infraestructura y cat
 
 **3. Catálogo de Datos Silver (Ventas Online):**
 ![Catálogo Silver Sales Online](docs/images/DatabricksCatalogSilverSalesOnline.png)
+
+**4. Event Hubs - Telemetria - Mensajes Recibidos :**
+![Validación Fail-Fast Max Retries](docs/images/PydanticValidationErrorMaxRetries.png)
